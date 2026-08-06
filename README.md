@@ -2,26 +2,20 @@
 
 This lab builds a Crossref-backed RAG corpus, evaluates it, injects controlled data corruption, and repairs the corpus from the raw snapshot.
 
-## Thành viên và phân công
+## Thực hiện
 
-| STT | Họ và tên | MSSV | Branch phụ trách | Phân công |
-|---:|---|---|---|---|
-| 1 | Vũ Văn Phong | 2A202601647 | `feat/pipeline-integration` | Tích hợp pipeline, cấu hình LLM, evaluation và hoàn thiện luồng end-to-end |
-| 2 | Hoàng Lê Minh | 2A202601653 | `feat/crossref-ingestion` | Crossref ingestion, parsing, retry/backoff và lưu raw artifacts |
-| 3 | Nguyễn Quang Vinh | 2A202601517 | `feat/cleaning-testset` | Cleaning, clean-data contract và evaluation test set |
-| 4 | Phạm Sỹ Đức | 2A202601601 | `feat/data-corruption` | Các kịch bản data corruption và corruption log |
-| 5 | Đoàn Nhật Nam | 2A202601123 | `feat/observability-reports` | Data quality, freshness monitoring và reports |
+| Thông tin | Nội dung |
+|---|---|
+| Họ và tên | Hà Duy Anh |
+| MSSV | 2A202601511 |
+| Khóa/Lớp | K3 |
+| Hình thức | Làm cá nhân — tự phụ trách toàn bộ pipeline (ingestion, cleaning, RAG/agent, evaluation, corruption, observability, orchestration) |
 
 ## Báo cáo công việc
 
-Các báo cáo công việc và vai trò thành viên nằm trong thư mục `report/` ở root:
+Báo cáo công việc nằm trong thư mục `report/` ở root:
 
-- [Báo cáo nhóm](report/group_report.md)
-- [Báo cáo cá nhân — Vũ Văn Phong](report/2A202601647_VuVanPhong.md)
-- [Báo cáo cá nhân — Hoàng Lê Minh](report/2A202601653_HoangLeMinh.md)
-- [Báo cáo cá nhân — Nguyễn Quang Vinh](report/2A202601517_NguyenQuangVinh.md)
-- [Báo cáo cá nhân — Phạm Sỹ Đức](report/2A202601601_PhamSyDuc.md)
-- [Báo cáo cá nhân — Đoàn Nhật Nam](report/2A202601123_DoanNhatNam.md)
+- [Báo cáo cá nhân — Hà Duy Anh](report/2A202601511_HaDuyAnh.md)
 
 Các báo cáo sinh tự động về dữ liệu và kết quả pipeline vẫn nằm trong `data/reports/`:
 
