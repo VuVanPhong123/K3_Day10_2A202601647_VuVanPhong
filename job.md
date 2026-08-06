@@ -41,7 +41,7 @@ Repo hiện mặc định `gemini-2.5-flash`, nên người tích hợp cần c�
 
 # Chia việc cho 5 người
 
-## Người 1 — Crossref ingestion
+## Người 1 — Crossref ingestion(Minh)
 
 **Branch**
 
@@ -79,7 +79,7 @@ Các chức năng này hiện đều là TODO độc lập.
 
 ---
 
-## Người 2 — Cleaning và evaluation test set
+## Người 2 — Cleaning và evaluation test set(Minh)
 
 **Branch**
 
@@ -138,7 +138,7 @@ Hai file này đang là TODO hoàn toàn.
 
 ---
 
-## Người 3 — Data observability và reports
+## Người 3 — Data observability và reports(Nam)
 
 **Branch**
 
@@ -200,7 +200,7 @@ Các hàm quality, freshness và reporting hiện đều chưa implement.
 
 ---
 
-## Người 4 — Data corruption
+## Người 4 — Data corruption(Đức)
 
 **Branch**
 
