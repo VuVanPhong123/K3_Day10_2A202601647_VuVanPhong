@@ -2,6 +2,27 @@
 
 This lab builds a Crossref-backed RAG corpus, evaluates it, injects controlled data corruption, and repairs the corpus from the raw snapshot.
 
+## Thành viên và phân công
+
+| STT | Họ và tên | MSSV | Branch phụ trách | Phân công |
+|---:|---|---|---|---|
+| 1 | Vũ Văn Phong | 2A202601647 | `feat/pipeline-integration` | Tích hợp pipeline, cấu hình LLM, evaluation và hoàn thiện luồng end-to-end |
+| 2 | Hoàng Lê Minh | 2A202601653 | `feat/crossref-ingestion` | Crossref ingestion, parsing, retry/backoff và lưu raw artifacts |
+| 3 | Nguyễn Quang Vinh | 2A202601517 | `feat/cleaning-testset` | Cleaning, clean-data contract và evaluation test set |
+| 4 | Phạm Sỹ Đức | 2A202601601 | `feat/data-corruption` | Các kịch bản data corruption và corruption log |
+| 5 | Đoàn Nhật Nam | 2A202601123 | `feat/observability-reports` | Data quality, freshness monitoring và reports |
+
+## Báo cáo
+
+- [Báo cáo nhóm](data/reports/group_report.md)
+- [Báo cáo cá nhân — Vũ Văn Phong](data/reports/2A202601647_vu_van_phong.md)
+- [Báo cáo cá nhân — Hoàng Lê Minh](data/reports/2A202601653_hoang_le_minh.md)
+- [Báo cáo cá nhân — Nguyễn Quang Vinh](data/reports/2A202601517_nguyen_quang_vinh.md)
+- [Báo cáo cá nhân — Phạm Sỹ Đức](data/reports/2A202601601_pham_sy_duc.md)
+- [Báo cáo cá nhân — Đoàn Nhật Nam](data/reports/2A202601123_doan_nhat_nam.md)
+- [Baseline report](data/reports/phase1_report.md)
+- [Corruption and repair report](data/reports/corruption_report.md)
+
 ## Requirements
 
 - Python 3.11–3.13
@@ -65,7 +86,7 @@ uv run python script/run_corruption_flow.py
 
 The pipeline writes raw Crossref response/records, clean CSV/JSON, local MiniLM embeddings and Chroma data, the shared evaluation set, baseline/corrupted/repaired answers and metrics, quality/freshness JSON, and Markdown reports under `data/`. Repair reads `data/raw/crossref_records.json` and reruns cleaning; it does not copy the baseline clean CSV.
 
-`data/chroma/`, `.env`, `job.txt`, caches and Python bytecode are intentionally ignored. Team member names and assignments remain a placeholder until supplied.
+`data/chroma/`, `.env`, `job.txt`, caches and Python bytecode are intentionally ignored.
 
 ## Checks
 
