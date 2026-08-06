@@ -20,8 +20,10 @@ from ingestion.corruption import (
 @pytest.fixture
 def clean_dataframe() -> pd.DataFrame:
     rows = []
+    run_date = pd.Timestamp("2025-01-01")
     for index in range(12):
         summary = f"A useful abstract for paper {index}."
+        published = f"2024-{(index % 9) + 1:02d}-01"
         rows.append(
             {
                 "paper_id": f"paper-{index:02d}",
@@ -29,9 +31,9 @@ def clean_dataframe() -> pd.DataFrame:
                 "summary": summary,
                 "authors_joined": f"Author {index}",
                 "categories_joined": "cs.AI, cs.LG",
-                "published": f"2024-{(index % 9) + 1:02d}-01",
+                "published": published,
                 "updated": f"2024-{(index % 9) + 1:02d}-02",
-                "age_days": 0,
+                "age_days": (run_date - pd.Timestamp(published)).days,
                 "summary_chars": len(summary),
                 "text_for_embedding": summary,
                 "abs_url": f"https://example.test/abs/{index}",
@@ -42,14 +44,16 @@ def clean_dataframe() -> pd.DataFrame:
 
 
 def test_drop_important_docs_prefers_target(clean_dataframe: pd.DataFrame) -> None:
+    indexed_dataframe = clean_dataframe.copy(deep=True)
+    indexed_dataframe.index = [0, 0, *range(1, 11)]
     result = _drop_important_docs(
-        clean_dataframe,
+        indexed_dataframe,
         {"paper-00", "paper-01"},
         seed=7,
     )
 
-    assert len(result) == len(clean_dataframe) - 1
-    assert set(clean_dataframe["paper_id"]) - set(result["paper_id"]) <= {
+    assert len(result) == len(indexed_dataframe) - 1
+    assert set(indexed_dataframe["paper_id"]) - set(result["paper_id"]) <= {
         "paper-00",
         "paper-01",
     }
@@ -116,11 +120,24 @@ def test_stale_publication_date_moves_dates_back(
 def test_add_duplicate_rows_adds_at_least_two_rows(
     clean_dataframe: pd.DataFrame,
 ) -> None:
-    result = _add_duplicate_rows(clean_dataframe, {"paper-00"}, seed=42)
+    result = _add_duplicate_rows(clean_dataframe.iloc[:1], {"paper-00"}, seed=42)
 
-    assert len(result) >= len(clean_dataframe) + 2
-    assert result["paper_id"].str.endswith("-dup").sum() >= 2
-    assert not result["paper_id"].duplicated().any()
+    assert len(result) == 3
+    assert result["paper_id"].str.contains(r"-dup(?:-\d+)?$").sum() == 2
+    base_paper_ids = result["paper_id"].str.replace(
+        r"-dup(?:-\d+)?$",
+        "",
+        regex=True,
+    )
+    assert base_paper_ids.duplicated().any()
+
+
+def test_add_duplicate_rows_respects_zero_ratio(
+    clean_dataframe: pd.DataFrame,
+) -> None:
+    result = _add_duplicate_rows(clean_dataframe, ratio=0, seed=42)
+
+    pd.testing.assert_frame_equal(result, clean_dataframe)
 
 
 def test_corrupt_clean_dataframe_is_deterministic(
@@ -137,6 +154,13 @@ def test_corrupt_clean_dataframe_is_deterministic(
     pd.testing.assert_frame_equal(first, second)
     assert json.loads(first_log.read_text(encoding="utf-8")) == json.loads(
         second_log.read_text(encoding="utf-8")
+    )
+    expected_age_days = (
+        pd.Timestamp("2025-01-01") - pd.to_datetime(first["published"])
+    ).dt.days
+    pd.testing.assert_series_equal(
+        first["age_days"],
+        expected_age_days.rename("age_days"),
     )
 
 
@@ -162,6 +186,17 @@ def test_target_doc_ids_corrupted_before_random_rows(
         seed=42,
     )
     records = json.loads((tmp_path / "corruption.json").read_text(encoding="utf-8"))
+
+    records_by_scenario = {record["scenario"]: record for record in records}
+    for scenario in (
+        "drop_important_docs",
+        "blank_summary",
+        "truncate_title",
+        "stale_publication_date",
+        "add_duplicate_rows",
+    ):
+        affected = records_by_scenario[scenario]["affected_paper_ids"]
+        assert any(paper_id in targets for paper_id in affected)
 
     for record in records[:-1]:
         affected = record["affected_paper_ids"]
@@ -192,7 +227,8 @@ def test_corruption_log_has_required_schema_and_quality_failure(
             "affected_paper_ids",
             "fields_changed",
         }.issubset(record)
+    for record in records[:-1]:
+        assert {"before", "after"}.issubset(record)
     assert (result["summary"] == "").any()
-    assert not result["paper_id"].duplicated().any()
     assert (result["summary_chars"] == result["summary"].str.len()).all()
     assert result.loc[0, "text_for_embedding"].startswith("Title:")

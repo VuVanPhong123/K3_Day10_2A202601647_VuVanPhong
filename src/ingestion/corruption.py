@@ -4,6 +4,7 @@ import json
 import math
 import random
 import string
+from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Iterable
@@ -122,7 +123,11 @@ def _drop_important_docs(
     positions = _select_positions(result, count, local_rng, target_ids)
     if not positions:
         return result
-    return result.drop(result.index[positions]).copy()
+    selected_positions = set(positions)
+    kept_positions = [
+        position for position in range(len(result)) if position not in selected_positions
+    ]
+    return result.iloc[kept_positions].copy()
 
 
 def _blank_summary(
@@ -297,19 +302,30 @@ def _add_duplicate_rows(
     if minimum < 1:
         raise ValueError("minimum duplicate count must be positive")
     result = df.copy(deep=True)
-    if result.empty:
+    if result.empty or ratio == 0:
         return result
 
     local_rng = _coerce_rng(rng, seed)
-    count = min(len(result), max(minimum, math.ceil(ratio * len(result))))
+    count = max(minimum, math.ceil(ratio * len(result)))
     positions = _select_positions(
         result,
-        count,
+        min(count, len(result)),
         local_rng,
         _normalise_target_ids(target_doc_ids),
     )
     if not positions:
         return result
+
+    if len(positions) < count:
+        target_positions, other_positions = _target_positions(
+            result,
+            _normalise_target_ids(target_doc_ids),
+            set(),
+        )
+        repeat_pool = target_positions or other_positions
+        positions.extend(
+            local_rng.choice(repeat_pool) for _ in range(count - len(positions))
+        )
 
     existing_ids = {_paper_id(value) for value in result["paper_id"]}
     duplicate_rows: list[pd.Series] = []
@@ -324,9 +340,44 @@ def _add_duplicate_rows(
     return pd.concat([result, duplicates], ignore_index=True)
 
 
-def _reference_date() -> pd.Timestamp:
-    """Use the same run-date convention expected by the cleaning stage."""
-    return pd.Timestamp.now().normalize()
+def _reference_date(df: pd.DataFrame) -> pd.Timestamp:
+    """Recover the cleaning run date from existing ``published`` and ``age_days``.
+
+    The clean DataFrame persists age in days but not its run date. Reconstructing
+    that date keeps the corruption result stable across calendar days while using
+    the same convention as cleaning: ``age_days = run_date - published``.
+    """
+    candidates: list[pd.Timestamp] = []
+    for published, age_days in zip(
+        df["published"].tolist(),
+        df["age_days"].tolist(),
+        strict=False,
+    ):
+        published_date = _parse_timestamp(published)
+        if published_date is None:
+            continue
+        try:
+            if pd.isna(age_days):
+                continue
+            age = int(age_days)
+        except (TypeError, ValueError):
+            continue
+        candidates.append(published_date.normalize() + pd.Timedelta(days=age))
+
+    if candidates:
+        frequencies = Counter(candidates)
+        highest_frequency = max(frequencies.values())
+        return max(
+            candidate
+            for candidate, frequency in frequencies.items()
+            if frequency == highest_frequency
+        )
+
+    published_dates = [
+        parsed for value in df["published"].tolist()
+        if (parsed := _parse_timestamp(value)) is not None
+    ]
+    return max(published_dates, default=pd.Timestamp("1970-01-01")).normalize()
 
 
 def _compute_age_days(value: Any, reference_date: pd.Timestamp) -> int | None:
@@ -350,9 +401,11 @@ def _build_text_for_embedding(row: pd.Series) -> str:
     )
 
 
-def _rebuild_derived_columns(df: pd.DataFrame) -> pd.DataFrame:
+def _rebuild_derived_columns(
+    df: pd.DataFrame,
+    reference_date: pd.Timestamp,
+) -> pd.DataFrame:
     result = df.copy(deep=True)
-    reference_date = _reference_date()
     result["summary_chars"] = result["summary"].map(lambda value: len(_text(value)))
     result["age_days"] = result["published"].map(
         lambda value: _compute_age_days(value, reference_date)
@@ -543,8 +596,10 @@ def corrupt_clean_dataframe(
     blank_ratio: float = 0.15,
     noise_ratio: float = 0.15,
     truncate_ratio: float = 0.15,
+    title_length: int = 10,
     stale_ratio: float = 0.20,
     duplicate_ratio: float = 0.10,
+    duplicate_min_rows: int = 2,
 ) -> pd.DataFrame:
     """Return a corrupted copy of ``df`` and write a JSON corruption log."""
     missing_columns = [column for column in CONTRACT_COLUMNS if column not in df.columns]
@@ -559,10 +614,15 @@ def corrupt_clean_dataframe(
         ("duplicate_ratio", duplicate_ratio),
     ):
         _validate_ratio(name, ratio)
+    if title_length < 1:
+        raise ValueError("title_length must be positive")
+    if duplicate_min_rows < 1:
+        raise ValueError("duplicate_min_rows must be positive")
 
     target_ids = _normalise_target_ids(target_doc_ids)
     result = df.copy(deep=True)
     row_count_before = len(result)
+    reference_date = _reference_date(result)
     rng = random.Random(seed)
     records: list[dict[str, Any]] = []
 
@@ -627,6 +687,7 @@ def corrupt_clean_dataframe(
         result,
         target_ids,
         ratio=truncate_ratio,
+        length=title_length,
         rng=rng,
     )
     records.append(
@@ -668,11 +729,12 @@ def corrupt_clean_dataframe(
         result,
         target_ids,
         ratio=duplicate_ratio,
+        minimum=duplicate_min_rows,
         rng=rng,
     )
     records.append(_duplicate_scenario_record(seed, before, result, target_ids))
 
-    result = _rebuild_derived_columns(result)
+    result = _rebuild_derived_columns(result, reference_date)
     affected_ids: list[str] = []
     for record in records:
         for paper_id in record["affected_paper_ids"]:
