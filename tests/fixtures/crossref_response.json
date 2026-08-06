@@ -1,0 +1,103 @@
+{
+  "status": "ok",
+  "message-type": "work-list",
+  "message": {
+    "items": [
+      {
+        "DOI": "10.1234/rag.2025.001",
+        "title": [
+          "Observability for <i>Retrieval-Augmented</i> Generation"
+        ],
+        "abstract": "<jats:abstract><jats:p>We study <jats:bold>data quality</jats:bold> &amp; reliable RAG pipelines.</jats:p><jats:p>Kết quả cải thiện retrieval.</jats:p></jats:abstract>",
+        "author": [
+          {
+            "given": "An",
+            "family": "Nguyễn"
+          },
+          {
+            "given": "Minh",
+            "family": "Tran"
+          }
+        ],
+        "subject": [
+          "Artificial Intelligence",
+          "Information Systems"
+        ],
+        "published": {
+          "date-parts": [
+            [
+              2025,
+              3,
+              14
+            ]
+          ]
+        },
+        "updated": {
+          "date-time": "2025-04-01T09:30:00Z"
+        },
+        "URL": "https://doi.org/10.1234/rag.2025.001",
+        "link": [
+          {
+            "URL": "https://example.org/article.xml",
+            "content-type": "application/xml"
+          },
+          {
+            "URL": "https://example.org/article.pdf",
+            "content-type": "application/pdf"
+          }
+        ],
+        "subtitle": [
+          "A reproducible pipeline"
+        ]
+      },
+      {
+        "DOI": "10.1234/minimal.2024.002",
+        "title": [
+          "A Minimal Valid Paper"
+        ],
+        "abstract": "<p>Abstract with enough metadata for ingestion.</p>",
+        "author": [
+          {
+            "name": "Crossref Test Consortium"
+          }
+        ],
+        "subject": [],
+        "published-online": {
+          "date-parts": [
+            [
+              2024,
+              7
+            ]
+          ]
+        },
+        "deposited": {
+          "date-parts": [
+            [
+              2024,
+              8,
+              2
+            ]
+          ]
+        },
+        "URL": "https://doi.org/10.1234/minimal.2024.002"
+      },
+      {
+        "title": [
+          "Missing DOI"
+        ],
+        "abstract": "<p>This record must be excluded.</p>"
+      },
+      {
+        "DOI": "10.1234/missing-title",
+        "title": [],
+        "abstract": "<p>This record must be excluded.</p>"
+      },
+      {
+        "DOI": "10.1234/missing-abstract",
+        "title": [
+          "Missing Abstract"
+        ]
+      }
+    ]
+  }
+}
