@@ -12,16 +12,21 @@ This lab builds a Crossref-backed RAG corpus, evaluates it, injects controlled d
 | 4 | Phạm Sỹ Đức | 2A202601601 | `feat/data-corruption` | Các kịch bản data corruption và corruption log |
 | 5 | Đoàn Nhật Nam | 2A202601123 | `feat/observability-reports` | Data quality, freshness monitoring và reports |
 
-## Báo cáo
+## Báo cáo công việc
 
-- [Báo cáo nhóm](data/reports/group_report.md)
-- [Báo cáo cá nhân — Vũ Văn Phong](data/reports/2A202601647_vu_van_phong.md)
-- [Báo cáo cá nhân — Hoàng Lê Minh](data/reports/2A202601653_hoang_le_minh.md)
-- [Báo cáo cá nhân — Nguyễn Quang Vinh](data/reports/2A202601517_nguyen_quang_vinh.md)
-- [Báo cáo cá nhân — Phạm Sỹ Đức](data/reports/2A202601601_pham_sy_duc.md)
-- [Báo cáo cá nhân — Đoàn Nhật Nam](data/reports/2A202601123_doan_nhat_nam.md)
-- [Baseline report](data/reports/phase1_report.md)
-- [Corruption and repair report](data/reports/corruption_report.md)
+Các báo cáo công việc và vai trò thành viên nằm trong thư mục `report/` ở root:
+
+- [Báo cáo nhóm](report/group_report.md)
+- [Báo cáo cá nhân — Vũ Văn Phong](report/2A202601647_VuVanPhong.md)
+- [Báo cáo cá nhân — Hoàng Lê Minh](report/2A202601653_HoangLeMinh.md)
+- [Báo cáo cá nhân — Nguyễn Quang Vinh](report/2A202601517_NguyenQuangVinh.md)
+- [Báo cáo cá nhân — Phạm Sỹ Đức](report/2A202601601_PhamSyDuc.md)
+- [Báo cáo cá nhân — Đoàn Nhật Nam](report/2A202601123_DoanNhatNam.md)
+
+Các báo cáo sinh tự động về dữ liệu và kết quả pipeline vẫn nằm trong `data/reports/`:
+
+- [Baseline data report](data/reports/phase1_report.md)
+- [Corruption and repair data report](data/reports/corruption_report.md)
 
 ## Requirements
 
@@ -84,7 +89,7 @@ uv run python script/run_corruption_flow.py
 
 ## Artifacts
 
-The pipeline writes raw Crossref response/records, clean CSV/JSON, local MiniLM embeddings and Chroma data, the shared evaluation set, baseline/corrupted/repaired answers and metrics, quality/freshness JSON, and Markdown reports under `data/`. Repair reads `data/raw/crossref_records.json` and reruns cleaning; it does not copy the baseline clean CSV.
+The pipeline writes raw Crossref response/records, clean CSV/JSON, local MiniLM embeddings and Chroma data, the shared evaluation set, baseline/corrupted/repaired answers and metrics, quality/freshness JSON, and generated data reports under `data/`. Repair reads `data/raw/crossref_records.json` and reruns cleaning; it does not copy the baseline clean CSV.
 
 `data/chroma/`, `.env`, `job.txt`, caches and Python bytecode are intentionally ignored.
 
