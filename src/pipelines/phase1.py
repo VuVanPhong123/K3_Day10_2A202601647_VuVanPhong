@@ -22,9 +22,9 @@ def _load_or_fetch_records(settings):
     return fetch_source_records(settings)
 
 
-def _run_agent_demo(settings, index) -> None:
+def _run_agent_demo(settings, index) -> str:
     if os.getenv("RUN_AGENT_DEMO", "").lower() not in {"1", "true", "yes"}:
-        return
+        return "not requested"
 
     test_set = read_json(settings.paths.eval_testset)
     agent = build_agent(settings=settings, index=index)
@@ -38,6 +38,7 @@ def _run_agent_demo(settings, index) -> None:
             }
         )
     write_json(settings.paths.demo_answers, answers)
+    return f"PASS ({len(answers)} answers)"
 
 
 def main() -> None:
@@ -79,17 +80,29 @@ def main() -> None:
         "clean_record_count": len(clean_df),
         "refresh_source": settings.refresh_source,
     }
+    agent_demo_status = _run_agent_demo(settings, index)
     generate_phase1_report(
         report_path=settings.paths.baseline_report,
         source_summary=source_summary,
         metrics=bundle.summary,
         quality=quality,
         freshness=freshness,
+        metadata={
+            "timestamp_utc": now_utc().isoformat(),
+            "llm_provider": settings.llm_provider,
+            "llm_model": settings.model_name,
+            "embedding_model": settings.embedding_model,
+            "collection_name": getattr(index, "collection_name", ""),
+            "clean_columns": list(clean_df.columns),
+            "agent_demo_status": agent_demo_status,
+            "artifact_paths": [str(settings.paths.baseline_metrics), str(settings.paths.baseline_answers)],
+        },
     )
-    _run_agent_demo(settings, index)
 
     print(f"Raw rows: {len(records)}")
     print(f"Clean rows: {len(clean_df)}")
     print(f"Baseline metrics: {settings.paths.baseline_metrics}")
     print(f"Quality report: {settings.paths.quality_dir}")
     print(f"Baseline report: {settings.paths.baseline_report}")
+    if os.getenv("RUN_RAGAS", "").lower() in {"1", "true", "yes"} and bundle.summary.get("ragas", {}).get("status") == "failed":
+        raise RuntimeError(f"Ragas evaluation failed: {bundle.summary['ragas'].get('error', 'unknown error')}")

@@ -1,7 +1,13 @@
 solution/
 .env
+.env.*
+!.env.example
 lab.txt
+job.txt
 .venv/
 src/*.egg-info/
 lab/
 **/__pycache__/
+*.pyc
+.pytest_cache/
+data/chroma/

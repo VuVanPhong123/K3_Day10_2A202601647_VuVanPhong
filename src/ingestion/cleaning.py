@@ -121,13 +121,6 @@ def build_clean_dataframe(records: list[PaperRecord], run_date: datetime) -> pd.
     frame = pd.DataFrame(rows, columns=CLEAN_COLUMNS)
     frame["title_key"] = frame["title"].str.casefold()
 
-    # Sort before de-duplication so output and survivor selection are stable
-    # regardless of the order in which the source API returned records.
-    frame = frame.sort_values(
-        by=["paper_id", "title_key", "summary", "published"],
-        ascending=[True, True, True, True],
-        kind="mergesort",
-    )
     frame = frame[
         (frame["paper_id"] != "")
         & (frame["title"] != "")
@@ -136,7 +129,14 @@ def build_clean_dataframe(records: list[PaperRecord], run_date: datetime) -> pd.
     if frame.empty:
         return _empty_clean_frame()
 
+    # Keep the first source occurrence for an identical ID, then use a stable
+    # sort for title-based de-duplication and final output order.
     frame = frame.drop_duplicates(subset=["paper_id"], keep="first")
+    frame = frame.sort_values(
+        by=["title_key", "paper_id", "summary", "published"],
+        ascending=[True, True, True, True],
+        kind="mergesort",
+    )
     frame = frame.drop_duplicates(subset=["title_key"], keep="first")
     frame = frame.sort_values(
         by=["published", "paper_id"],

@@ -6,10 +6,20 @@ from typing import Any
 from core.utils import write_text
 
 
-def _fmt(val: Any) -> str:
-    if isinstance(val, float):
-        return f"{val:.4f}"
-    return str(val)
+def _fmt(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        return f"{value:.4f}"
+    return str(value)
+
+
+def _source_value(source: dict[str, Any], canonical: str, legacy: str) -> Any:
+    return source.get(canonical, source.get(legacy, ""))
+
+
+def _status(success: bool) -> str:
+    return "PASS" if success else "FAIL"
 
 
 def generate_phase1_report(
@@ -18,49 +28,86 @@ def generate_phase1_report(
     metrics: dict[str, Any],
     quality: dict[str, Any],
     freshness: dict[str, Any],
+    metadata: dict[str, Any] | None = None,
 ) -> None:
-    """Generate Markdown report for baseline Phase 1 pipeline."""
-    path = Path(report_path) if isinstance(report_path, str) else report_path
+    """Generate a baseline report from the actual pipeline artifacts."""
+    metadata = metadata or {}
+    lines = [
+        "# Baseline Pipeline Report (Phase 1)",
+        "",
+        "## Run Metadata",
+        f"- Timestamp (UTC): `{metadata.get('timestamp_utc', '')}`",
+        f"- LLM provider/model: `{metadata.get('llm_provider', '')}` / `{metadata.get('llm_model', '')}`",
+        f"- Embedding model: `{metadata.get('embedding_model', '')}`",
+        f"- Chroma collection: `{metadata.get('collection_name', '')}`",
+        "",
+        "## Source Summary",
+        f"- Source API: `{source_summary.get('source_api', '')}`",
+        f"- Query: `{_source_value(source_summary, 'source_query', 'query')}`",
+        f"- Filter: `{_source_value(source_summary, 'source_filter', 'filter')}`",
+        f"- Raw row count: `{_source_value(source_summary, 'raw_record_count', 'total_fetched')}`",
+        f"- Clean row count: `{_source_value(source_summary, 'clean_record_count', 'clean_records_count')}`",
+        "",
+        "## Clean Schema",
+        f"`{', '.join(metadata.get('clean_columns', []))}`",
+        "",
+        "## Evaluation Metrics",
+        "| Metric | Value |",
+        "| :--- | ---: |",
+    ]
+    for key, value in metrics.items():
+        if isinstance(value, (int, float, str, bool)):
+            lines.append(f"| `{key}` | `{_fmt(value)}` |")
+    lines += [
+        "",
+        "## LLM Judge",
+        f"- Provider/model: `{metrics.get('judge_provider', metadata.get('llm_provider', ''))}` / `{metrics.get('judge_model', metadata.get('llm_model', ''))}`",
+        f"- Successful LLM judgments: `{metrics.get('llm_judge_success_count', 0)}`",
+        f"- Heuristic fallbacks: `{metrics.get('llm_judge_fallback_count', 0)}`",
+        "",
+        "## Ragas",
+        f"`{metrics.get('ragas', {})}`",
+        "",
+        "## Data Quality",
+        f"- Status: `{_status(bool(quality.get('overall_success')))}`",
+        f"- Passed/total: `{quality.get('passed_checks', 0)}/{quality.get('total_checks', 0)}`",
+        "",
+        "| Check | Status | Observed | Expected |",
+        "| :--- | :--- | ---: | ---: |",
+    ]
+    for check in quality.get("checks", []):
+        lines.append(
+            f"| `{check.get('name', '')}` | `{_status(bool(check.get('success')))}` | "
+            f"`{_fmt(check.get('observed'))}` | `{_fmt(check.get('expected'))}` |"
+        )
+    lines += [
+        "",
+        "## Freshness",
+        f"- Status: `{_status(bool(freshness.get('is_fresh')))}`",
+        f"- Latest/oldest valid publication: `{freshness.get('latest_published', '')}` / `{freshness.get('oldest_published', '')}`",
+        f"- Invalid/future dates: `{freshness.get('invalid_publication_dates', 0)}/{freshness.get('future_publication_dates', 0)}`",
+        f"- Stale ratio: `{_fmt(freshness.get('stale_ratio', 0.0))}`",
+        "",
+        "## Agent Demo",
+        f"- Status: `{metadata.get('agent_demo_status', 'not requested')}`",
+        "",
+        "## Artifact Paths",
+    ]
+    for path in metadata.get("artifact_paths", []):
+        lines.append(f"- `{path}`")
+    lines += [
+        "",
+        "## Limitations",
+        "- LLM judge and agent demo require the selected provider credentials when enabled.",
+        "- Ragas is optional and is reported separately from the core retrieval metrics.",
+    ]
+    write_text(Path(report_path), "\n".join(lines) + "\n")
 
-    lines: list[str] = []
-    lines.append("# Baseline Pipeline Report (Phase 1)")
-    lines.append("")
-    lines.append("## 1. Source Summary")
-    lines.append(f"- **Source API**: {source_summary.get('source_api', 'Crossref REST API')}")
-    lines.append(f"- **Query**: `{source_summary.get('query', 'N/A')}`")
-    lines.append(f"- **Filter**: `{source_summary.get('filter', 'N/A')}`")
-    lines.append(f"- **Total Records Fetched**: {source_summary.get('total_fetched', 'N/A')}")
-    lines.append(f"- **Clean Records Count**: {source_summary.get('clean_records_count', 'N/A')}")
-    lines.append("")
 
-    lines.append("## 2. Evaluation Metrics")
-    lines.append("| Metric | Value |")
-    lines.append("| :--- | :--- |")
-    for key, val in metrics.items():
-        if isinstance(val, (int, float, str)):
-            lines.append(f"| `{key}` | {_fmt(val)} |")
-    lines.append("")
-
-    lines.append("## 3. Data Quality Checks")
-    lines.append(f"- **Overall Status**: {'PASSED ✅' if quality.get('overall_success') else 'FAILED ❌'}")
-    lines.append(f"- **Passed Checks**: {quality.get('passed_checks', 0)} / {quality.get('total_checks', 0)}")
-    lines.append("")
-    lines.append("| Check Name | Status | Observed | Expected |")
-    lines.append("| :--- | :--- | :--- | :--- |")
-    for chk in quality.get("checks", []):
-        status = "PASSED ✅" if chk.get("success") else "FAILED ❌"
-        lines.append(f"| `{chk.get('name')}` | {status} | {_fmt(chk.get('observed'))} | {_fmt(chk.get('expected'))} |")
-    lines.append("")
-
-    lines.append("## 4. Freshness Report")
-    lines.append(f"- **Freshness Status**: {'FRESH ✅' if freshness.get('is_fresh') else 'STALE ⚠️'}")
-    lines.append(f"- **Latest Published Date**: `{freshness.get('latest_published', 'N/A')}`")
-    lines.append(f"- **Oldest Published Date**: `{freshness.get('oldest_published', 'N/A')}`")
-    lines.append(f"- **Stale Rows Ratio**: `{_fmt(freshness.get('stale_ratio', 0.0))}` ({freshness.get('stale_rows', 0)} / {freshness.get('total_rows', 0)})")
-    lines.append(f"- **Freshness Threshold**: `{freshness.get('freshness_threshold_days', 180)} days`")
-    lines.append("")
-
-    write_text(path, "\n".join(lines))
+def _numeric_delta(baseline: Any, value: Any) -> str:
+    if isinstance(baseline, (int, float)) and isinstance(value, (int, float)):
+        return f"{value - baseline:+.4f}"
+    return ""
 
 
 def generate_corruption_report(
@@ -72,67 +119,132 @@ def generate_corruption_report(
     repaired_quality: dict[str, Any],
     corrupted_freshness: dict[str, Any],
     repaired_freshness: dict[str, Any],
+    baseline_quality: dict[str, Any] | None = None,
+    baseline_freshness: dict[str, Any] | None = None,
+    corruption_log: list[dict[str, Any]] | None = None,
 ) -> None:
-    """Generate Markdown report comparing Baseline vs Corrupted vs Repaired states."""
-    path = Path(report_path) if isinstance(report_path, str) else report_path
-
-    lines: list[str] = []
-    lines.append("# Data Corruption & Pipeline Repair Comparison Report")
-    lines.append("")
-    lines.append("## 1. Metrics Comparison (Absolute & Delta)")
-    lines.append("")
-    lines.append("| Metric | Baseline | Corrupted | Repaired | Corrupted Delta | Repaired Delta |")
-    lines.append("| :--- | :--- | :--- | :--- | :--- | :--- |")
-
-    all_keys = list(
-        dict.fromkeys(
-            list(baseline_metrics.keys()) + list(corrupted_metrics.keys()) + list(repaired_metrics.keys())
+    """Generate a three-state comparison report with metric-derived findings."""
+    baseline_quality = baseline_quality or {}
+    baseline_freshness = baseline_freshness or {}
+    corruption_log = corruption_log or []
+    keys = list(dict.fromkeys((*baseline_metrics.keys(), *corrupted_metrics.keys(), *repaired_metrics.keys())))
+    lines = [
+        "# Data Corruption & Pipeline Repair Comparison Report",
+        "",
+        "## Corruption Scenarios",
+        f"- Scenarios recorded: `{len(corruption_log)}`",
+        f"- Affected document IDs: `{len({doc_id for item in corruption_log for doc_id in item.get('affected_paper_ids', [])})}`",
+        "",
+        "## Metrics Comparison (Corrupted Delta and Repaired Delta)",
+        "| Metric | Baseline | Corrupted | Repaired | Corrupted Δ | Repaired Δ |",
+        "| :--- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for key in keys:
+        lines.append(
+            f"| `{key}` | `{_fmt(baseline_metrics.get(key))}` | `{_fmt(corrupted_metrics.get(key))}` | "
+            f"`{_fmt(repaired_metrics.get(key))}` | `{_numeric_delta(baseline_metrics.get(key), corrupted_metrics.get(key))}` | "
+            f"`{_numeric_delta(baseline_metrics.get(key), repaired_metrics.get(key))}` |"
         )
-    )
+    lines += [
+        "",
+        "## Data Quality Comparison",
+        "| State | Status | Passed | Failed | Rows |",
+        "| :--- | :--- | ---: | ---: | ---: |",
+    ]
+    for name, payload in (("Baseline", baseline_quality), ("Corrupted", corrupted_quality), ("Repaired", repaired_quality)):
+        lines.append(f"| **{name}** | `{_status(bool(payload.get('overall_success')))}` | `{payload.get('passed_checks', 0)}` | `{payload.get('failed_checks', 0)}` | `{payload.get('total_rows', '')}` |")
+    lines += [
+        "",
+        "## Freshness Comparison",
+        "| State | Status | Latest | Stale ratio | Invalid dates |",
+        "| :--- | :--- | :--- | ---: | ---: |",
+    ]
+    for name, payload in (("Baseline", baseline_freshness), ("Corrupted", corrupted_freshness), ("Repaired", repaired_freshness)):
+        lines.append(f"| **{name}** | `{_status(bool(payload.get('is_fresh')))}` | `{payload.get('latest_published', '')}` | `{_fmt(payload.get('stale_ratio', 0.0))}` | `{payload.get('invalid_publication_dates', 0)}` |")
 
-    for key in all_keys:
-        b_val = baseline_metrics.get(key)
-        c_val = corrupted_metrics.get(key)
-        r_val = repaired_metrics.get(key)
+    degraded = [
+        key for key in ("retrieval_hit_rate", "mean_token_f1", "judge_accuracy", "mean_judge_score")
+        if isinstance(baseline_metrics.get(key), (int, float))
+        and isinstance(corrupted_metrics.get(key), (int, float))
+        and corrupted_metrics[key] < baseline_metrics[key]
+    ]
+    recovered = [
+        key for key in degraded
+        if isinstance(repaired_metrics.get(key), (int, float))
+        and repaired_metrics[key] > corrupted_metrics[key]
+    ]
+    lines += ["", "## Evidence-based Conclusion"]
+    if degraded:
+        lines.append(f"- Corruption reduced: `{', '.join(degraded)}`.")
+    else:
+        lines.append("- No requested retrieval/answer/judge metric decreased in this run.")
+    if recovered:
+        lines.append(f"- Repair improved over corrupted for: `{', '.join(recovered)}`.")
+    else:
+        lines.append("- Repair did not improve a measured degraded metric in this run.")
+    lines.append(f"- Quality status: baseline `{_status(bool(baseline_quality.get('overall_success')))}`, corrupted `{_status(bool(corrupted_quality.get('overall_success')))}`, repaired `{_status(bool(repaired_quality.get('overall_success')))}`.")
+    lines.append("- Repair input was the raw-record snapshot and the clean transformation was rerun.")
+    write_text(Path(report_path), "\n".join(lines) + "\n")
 
-        if isinstance(b_val, (int, float)) and isinstance(c_val, (int, float)):
-            c_delta = c_val - b_val
-            c_delta_str = f"{c_delta:+.4f}"
-        else:
-            c_delta_str = "N/A"
 
-        if isinstance(b_val, (int, float)) and isinstance(r_val, (int, float)):
-            r_delta = r_val - b_val
-            r_delta_str = f"{r_delta:+.4f}"
-        else:
-            r_delta_str = "N/A"
-
-        lines.append(f"| `{key}` | {_fmt(b_val)} | {_fmt(c_val)} | {_fmt(r_val)} | `{c_delta_str}` | `{r_delta_str}` |")
-
-    lines.append("")
-    lines.append("## 2. Data Quality Checks Comparison")
-    lines.append("")
-    lines.append("| State | Overall Status | Passed Checks | Failed Checks |")
-    lines.append("| :--- | :--- | :--- | :--- |")
-    c_q_status = "PASSED ✅" if corrupted_quality.get("overall_success") else "FAILED ❌"
-    r_q_status = "PASSED ✅" if repaired_quality.get("overall_success") else "FAILED ❌"
-    lines.append(f"| **Corrupted** | {c_q_status} | {corrupted_quality.get('passed_checks', 0)} | {corrupted_quality.get('failed_checks', 0)} |")
-    lines.append(f"| **Repaired** | {r_q_status} | {repaired_quality.get('passed_checks', 0)} | {repaired_quality.get('failed_checks', 0)} |")
-
-    lines.append("")
-    lines.append("## 3. Freshness Comparison")
-    lines.append("")
-    lines.append("| State | Freshness Status | Latest Published | Stale Ratio |")
-    lines.append("| :--- | :--- | :--- | :--- |")
-    c_f_status = "FRESH ✅" if corrupted_freshness.get("is_fresh") else "STALE ⚠️"
-    r_f_status = "FRESH ✅" if repaired_freshness.get("is_fresh") else "STALE ⚠️"
-    lines.append(f"| **Corrupted** | {c_f_status} | `{corrupted_freshness.get('latest_published', 'N/A')}` | `{_fmt(corrupted_freshness.get('stale_ratio', 0.0))}` |")
-    lines.append(f"| **Repaired** | {r_f_status} | `{repaired_freshness.get('latest_published', 'N/A')}` | `{_fmt(repaired_freshness.get('stale_ratio', 0.0))}` |")
-
-    lines.append("")
-    lines.append("## 4. Analysis & Executive Summary")
-    lines.append("- **Impact of Corruption**: Injecting noise, truncation, blank abstracts, and stale dates severely degrades retrieval accuracy and LLM answer quality.")
-    lines.append("- **Recovery via Repair**: Re-ingesting and cleaning raw data from the authoritative source restores data quality checks to 100% success and recovers RAG agent accuracy back to baseline levels.")
-
-    write_text(path, "\n".join(lines))
-
+def generate_final_lab_report(report_path: Path | str, artifacts: dict[str, Any]) -> None:
+    """Write the final lab report from already-loaded artifact data."""
+    baseline = artifacts.get("baseline_metrics", {})
+    corrupted = artifacts.get("corrupted_metrics", {})
+    repaired = artifacts.get("repaired_metrics", {})
+    lines = [
+        "# Final Lab Report: Data Pipeline and Data Observability",
+        "",
+        "## Team Information",
+        "> Pending: team member names and assignments will be supplied later.",
+        "",
+        "## Lab Objective",
+        "Build, observe, corrupt, repair and evaluate a Crossref-backed RAG corpus.",
+        "",
+        "## System Architecture",
+        "```mermaid",
+        "flowchart LR",
+        " A[Crossref API] --> B[Raw Snapshot] --> C[Cleaning] --> D[MiniLM Embeddings] --> E[ChromaDB]",
+        " C --> F[Quality and Freshness]",
+        " E --> G[RAG Evaluation]",
+        " C --> H[Corruption] --> I[Corrupted Evaluation]",
+        " B --> J[Repair from Raw] --> K[Repaired Evaluation]",
+        " G --> L[Comparison Report]; I --> L; K --> L",
+        "```",
+        "",
+        "## Data Lineage",
+        "Crossref response → parsed raw records → clean contract → local MiniLM/Chroma index → evaluation and observability artifacts.",
+        "",
+        "## Source, Cleaning and Retrieval",
+        f"- Source: `{artifacts.get('source_summary', {})}`",
+        f"- Clean rows: `{artifacts.get('clean_rows', '')}`; test-set samples: `{artifacts.get('test_set_size', '')}`",
+        f"- Embedding model: `{artifacts.get('embedding_model', '')}`",
+        "- RAG answers use the same evaluation set for baseline, corrupted and repaired states.",
+        "",
+        "## Evaluation Methodology",
+        "Retrieval hit rate, token F1, LLM judge accuracy/score, data quality checks and freshness are compared across three states.",
+        "",
+        "## Baseline Results",
+        f"`{baseline}`",
+        "",
+        "## Corruption and Repair Results",
+        f"- Corrupted: `{corrupted}`",
+        f"- Repaired: `{repaired}`",
+        f"- Quality: `{artifacts.get('quality_comparison', {})}`",
+        f"- Freshness: `{artifacts.get('freshness_comparison', {})}`",
+        "",
+        "## Reproducibility and Artifact Inventory",
+        "Run `uv sync --extra dev`, configure `.env`, run baseline first, then run corruption flow. Raw snapshots are retained so repair does not copy the baseline clean CSV.",
+        "",
+    ]
+    for item in artifacts.get("artifact_paths", []):
+        lines.append(f"- `{item}`")
+    lines += [
+        "",
+        "## Known Limitations",
+        "Provider availability, model nondeterminism and optional Ragas compatibility can affect LLM metrics.",
+        "",
+        "## Final Conclusion",
+        "The conclusion is intentionally derived from the recorded baseline, corrupted and repaired artifacts; no fixed recovery percentage is asserted.",
+    ]
+    write_text(Path(report_path), "\n".join(lines) + "\n")

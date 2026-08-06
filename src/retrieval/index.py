@@ -39,27 +39,32 @@ class LocalEmbeddingIndex:
         self.collection = self.client.get_collection(name=collection_name)
         self.documents_by_paper_id = {document["paper_id"].lower(): document for document in documents}
         self.documents_by_title = {document["title"].lower(): document for document in documents}
+        self.documents_by_record_id = {document["record_id"]: document for document in documents}
 
     @staticmethod
     def _build_documents(df: pd.DataFrame) -> list[dict[str, Any]]:
         records = df.to_dict(orient="records")
         documents: list[dict[str, Any]] = []
         for index, row in enumerate(records):
+            def text_value(column: str) -> str:
+                value = row.get(column, "")
+                return "" if pd.isna(value) else str(value)
+
             documents.append(
                 {
-                    "record_id": f"{row['paper_id']}::{index}",
-                    "paper_id": row["paper_id"],
-                    "title": row["title"],
-                    "content": row["text_for_embedding"],
+                    "record_id": f"{text_value('paper_id')}::{index}",
+                    "paper_id": text_value("paper_id"),
+                    "title": text_value("title"),
+                    "content": text_value("text_for_embedding"),
                     "metadata": {
-                        "paper_id": row["paper_id"],
-                        "title": row["title"],
-                        "published": row["published"],
-                        "authors_joined": row["authors_joined"],
-                        "categories_joined": row["categories_joined"],
-                        "summary": row["summary"],
-                        "abs_url": row["abs_url"],
-                        "pdf_url": row["pdf_url"],
+                        "paper_id": text_value("paper_id"),
+                        "title": text_value("title"),
+                        "published": text_value("published"),
+                        "authors_joined": text_value("authors_joined"),
+                        "categories_joined": text_value("categories_joined"),
+                        "summary": text_value("summary"),
+                        "abs_url": text_value("abs_url"),
+                        "pdf_url": text_value("pdf_url"),
                     },
                 }
             )
@@ -152,15 +157,20 @@ class LocalEmbeddingIndex:
 
         scored: list[SearchResult] = []
         for record_id, content, metadata, distance in zip(ids, documents, metadatas, distances, strict=False):
-            if not record_id or not metadata or not content:
+            manifest_document = self.documents_by_record_id.get(record_id)
+            if not record_id or not content or manifest_document is None:
                 continue
+            # Chroma can omit metadata fields whose values were normalized by
+            # the backend. The manifest is the authoritative local copy of
+            # the clean contract, so hydrate missing fields before QA reads it.
+            hydrated_metadata = dict(manifest_document.get("metadata", {}))
             scored.append(
                 SearchResult(
-                    paper_id=str(metadata["paper_id"]),
-                    title=str(metadata["title"]),
+                    paper_id=str(hydrated_metadata["paper_id"]),
+                    title=str(hydrated_metadata["title"]),
                     score=max(0.0, 1.0 - float(distance or 0.0)),
                     content=str(content),
-                    metadata=dict(metadata),
+                    metadata=hydrated_metadata,
                 )
             )
         return scored

@@ -1,0 +1,16 @@
+{
+  "samples": 12,
+  "retrieval_hit_rate": 0.25,
+  "mean_token_f1": 0.03251507321274763,
+  "judge_accuracy": 0.0,
+  "mean_judge_score": 1,
+  "judge_provider": "gemini",
+  "judge_model": "gemini-3.5-flash-lite",
+  "llm_judge_success_count": 12,
+  "llm_judge_fallback_count": 0,
+  "ragas": {
+    "status": "failed",
+    "error": "Ragas returned invalid metrics: answer_relevancy, context_precision, context_recall, faithfulness",
+    "dependency_version": "0.4.3"
+  }
+}

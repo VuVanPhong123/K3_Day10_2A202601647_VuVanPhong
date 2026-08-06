@@ -7,218 +7,152 @@ from typing import Any
 import pandas as pd
 
 from core.config import Settings
-from core.utils import write_json
+from core.utils import normalize_whitespace, write_json
+
+
+def _non_empty(series: pd.Series) -> pd.Series:
+    return series.notna() & series.astype(str).str.strip().ne("") & series.astype(str).str.lower().ne("nan")
+
+
+def _date_series(df: pd.DataFrame) -> pd.Series:
+    if "published" not in df:
+        return pd.Series(pd.NaT, index=df.index, dtype="datetime64[ns, UTC]")
+    return pd.to_datetime(df["published"], errors="coerce", utc=True)
+
+
+def _content_fingerprint(df: pd.DataFrame) -> pd.Series:
+    parts = []
+    for column in ("title", "summary", "published", "authors_joined"):
+        if column in df:
+            values = df[column].fillna("").astype(str).map(normalize_whitespace).str.casefold()
+        else:
+            values = pd.Series("", index=df.index)
+        parts.append(values)
+    fingerprint = parts[0]
+    for part in parts[1:]:
+        fingerprint = fingerprint + "\x1f" + part
+    return fingerprint
+
+
+def _check(name: str, success: bool, observed: Any, expected: Any, **details: Any) -> dict[str, Any]:
+    return {
+        "name": name,
+        "success": bool(success),
+        "observed": observed,
+        "expected": expected,
+        "details": details,
+    }
 
 
 def run_data_quality_checks(df: pd.DataFrame, settings: Settings, report_name: str) -> dict[str, Any]:
-    """Run data quality checks on a DataFrame and save JSON report.
-
-    Checks:
-    - row_count_sufficient
-    - paper_id_not_null
-    - paper_id_unique
-    - title_not_empty
-    - summary_sufficient_length
-    - text_for_embedding_not_empty
-    - no_duplicate_rows
-    - stale_records_ratio
-    - latest_pub_date_fresh
-    """
+    """Run deterministic quality checks and persist the report artifact."""
     total_rows = len(df)
+    threshold = int(getattr(settings, "freshness_threshold_days", 180))
+    min_rows = int(getattr(settings, "min_clean_records", 3))
     checks: list[dict[str, Any]] = []
 
-    # 1. row_count_sufficient
-    expected_rows = getattr(settings, "max_results", 1)
-    row_count_success = total_rows >= expected_rows if total_rows > 0 else False
-    checks.append(
-        {
-            "name": "row_count_sufficient",
-            "success": row_count_success,
-            "observed": total_rows,
-            "expected": expected_rows,
-            "details": {"description": f"Expected at least {expected_rows} rows"},
-        }
-    )
+    checks.append(_check(
+        "row_count_sufficient", total_rows >= min_rows,
+        total_rows, min_rows, description="Minimum clean rows required to build an evaluation set",
+    ))
 
-    # 2. paper_id_not_null
-    paper_id_not_null_cnt = int(df["paper_id"].notna().sum()) if total_rows > 0 and "paper_id" in df.columns else 0
-    checks.append(
-        {
-            "name": "paper_id_not_null",
-            "success": paper_id_not_null_cnt == total_rows and total_rows > 0,
-            "observed": paper_id_not_null_cnt,
-            "expected": total_rows,
-            "details": {"null_count": total_rows - paper_id_not_null_cnt},
-        }
-    )
+    ids = _non_empty(df["paper_id"]) if "paper_id" in df else pd.Series(False, index=df.index)
+    checks.append(_check("paper_id_not_null", int(ids.sum()) == total_rows and total_rows > 0,
+                         int(ids.sum()), total_rows))
+    unique_ids = int(df.loc[ids, "paper_id"].astype(str).nunique()) if "paper_id" in df else 0
+    checks.append(_check("paper_id_unique", unique_ids == total_rows and total_rows > 0,
+                         unique_ids, total_rows))
 
-    # 3. paper_id_unique
-    paper_id_unique_cnt = int(df["paper_id"].nunique()) if total_rows > 0 and "paper_id" in df.columns else 0
-    checks.append(
-        {
-            "name": "paper_id_unique",
-            "success": paper_id_unique_cnt == total_rows and total_rows > 0,
-            "observed": paper_id_unique_cnt,
-            "expected": total_rows,
-            "details": {"unique_count": paper_id_unique_cnt, "total_rows": total_rows},
-        }
-    )
+    titles = _non_empty(df["title"]) if "title" in df else pd.Series(False, index=df.index)
+    checks.append(_check("title_not_empty", int(titles.sum()) == total_rows and total_rows > 0,
+                         int(titles.sum()), total_rows))
 
-    # 4. title_not_empty
-    if total_rows > 0 and "title" in df.columns:
-        title_valid_cnt = int(df["title"].astype(str).str.strip().ne("").sum())
+    summaries = _non_empty(df["summary"]) if "summary" in df else pd.Series(False, index=df.index)
+    summary_lengths = df["summary"].fillna("").astype(str).str.len() if "summary" in df else pd.Series(0, index=df.index)
+    min_summary_length = 100
+    sufficient = summaries & (summary_lengths >= min_summary_length)
+    checks.append(_check("summary_sufficient_length", int(sufficient.sum()) == total_rows and total_rows > 0,
+                         int(sufficient.sum()), total_rows, min_required_length=min_summary_length))
+
+    embedding_text = _non_empty(df["text_for_embedding"]) if "text_for_embedding" in df else pd.Series(False, index=df.index)
+    checks.append(_check("text_for_embedding_not_empty", int(embedding_text.sum()) == total_rows and total_rows > 0,
+                         int(embedding_text.sum()), total_rows))
+
+    duplicate_content = total_rows - int(_content_fingerprint(df).nunique()) if total_rows else 0
+    checks.append(_check(
+        "no_duplicate_rows", duplicate_content == 0 and total_rows > 0,
+        duplicate_content, 0,
+        fingerprint="normalized title, summary, published and authors_joined",
+    ))
+
+    published = _date_series(df)
+    published_valid = published.notna()
+    now = pd.Timestamp.now(tz="UTC")
+    future_count = int((published > now).fillna(False).sum())
+    checks.append(_check(
+        "published_date_valid",
+        int(published_valid.sum()) == total_rows and future_count == 0 and total_rows > 0,
+        int(published_valid.sum()), total_rows, future_dates=future_count,
+    ))
+
+    if "age_days" in df:
+        ages = pd.to_numeric(df["age_days"], errors="coerce")
+        age_valid = ages.notna() & published_valid & (ages >= 0)
     else:
-        title_valid_cnt = 0
-    checks.append(
-        {
-            "name": "title_not_empty",
-            "success": title_valid_cnt == total_rows and total_rows > 0,
-            "observed": title_valid_cnt,
-            "expected": total_rows,
-            "details": {"empty_title_count": total_rows - title_valid_cnt},
-        }
-    )
+        ages = pd.Series(float("nan"), index=df.index)
+        age_valid = pd.Series(False, index=df.index)
+    checks.append(_check("age_days_valid", int(age_valid.sum()) == total_rows and total_rows > 0,
+                         int(age_valid.sum()), total_rows))
 
-    # 5. summary_sufficient_length
-    if total_rows > 0 and "summary_chars" in df.columns:
-        summary_valid_cnt = int((df["summary_chars"] >= 100).sum())
-    elif total_rows > 0 and "summary" in df.columns:
-        summary_valid_cnt = int((df["summary"].astype(str).str.len() >= 100).sum())
-    else:
-        summary_valid_cnt = 0
-    checks.append(
-        {
-            "name": "summary_sufficient_length",
-            "success": summary_valid_cnt == total_rows and total_rows > 0,
-            "observed": summary_valid_cnt,
-            "expected": total_rows,
-            "details": {"min_required_length": 100, "valid_count": summary_valid_cnt},
-        }
-    )
+    stale = age_valid & (ages > threshold)
+    stale_count = int(stale.sum())
+    stale_ratio = round(stale_count / total_rows, 4) if total_rows else 0.0
+    checks.append(_check("stale_records_ratio", stale_ratio == 0.0 and total_rows > 0,
+                         stale_ratio, 0.0, stale_rows=stale_count, threshold_days=threshold))
 
-    # 6. text_for_embedding_not_empty
-    if total_rows > 0 and "text_for_embedding" in df.columns:
-        embed_text_valid_cnt = int(df["text_for_embedding"].astype(str).str.strip().ne("").sum())
-    else:
-        embed_text_valid_cnt = 0
-    checks.append(
-        {
-            "name": "text_for_embedding_not_empty",
-            "success": embed_text_valid_cnt == total_rows and total_rows > 0,
-            "observed": embed_text_valid_cnt,
-            "expected": total_rows,
-            "details": {"empty_count": total_rows - embed_text_valid_cnt},
-        }
-    )
+    latest_age = int(ages[age_valid].min()) if age_valid.any() else None
+    checks.append(_check("latest_pub_date_fresh", latest_age is not None and 0 <= latest_age <= threshold,
+                         latest_age, threshold, threshold_days=threshold))
 
-    # 7. no_duplicate_rows
-    if total_rows > 0 and "paper_id" in df.columns:
-        duplicate_cnt = int(total_rows - len(df.drop_duplicates(subset=["paper_id"])))
-    else:
-        duplicate_cnt = 0
-    checks.append(
-        {
-            "name": "no_duplicate_rows",
-            "success": duplicate_cnt == 0 and total_rows > 0,
-            "observed": duplicate_cnt,
-            "expected": 0,
-            "details": {"duplicate_row_count": duplicate_cnt},
-        }
-    )
-
-    # 8. stale_records_ratio
-    freshness_threshold = getattr(settings, "freshness_threshold_days", 180)
-    if total_rows > 0 and "age_days" in df.columns:
-        stale_cnt = int((df["age_days"] > freshness_threshold).sum())
-        stale_ratio = round(stale_cnt / total_rows, 4)
-    else:
-        stale_cnt = total_rows
-        stale_ratio = 1.0 if total_rows > 0 else 0.0
-
-    checks.append(
-        {
-            "name": "stale_records_ratio",
-            "success": stale_ratio == 0.0 and total_rows > 0,
-            "observed": stale_ratio,
-            "expected": 0.0,
-            "details": {
-                "stale_rows": stale_cnt,
-                "total_rows": total_rows,
-                "threshold_days": freshness_threshold,
-            },
-        }
-    )
-
-    # 9. latest_pub_date_fresh
-    if total_rows > 0 and "age_days" in df.columns:
-        min_age_days = int(df["age_days"].min())
-    else:
-        min_age_days = 9999
-
-    checks.append(
-        {
-            "name": "latest_pub_date_fresh",
-            "success": min_age_days <= freshness_threshold and total_rows > 0,
-            "observed": min_age_days,
-            "expected": freshness_threshold,
-            "details": {"threshold_days": freshness_threshold},
-        }
-    )
-
-    passed_checks = sum(1 for c in checks if c["success"])
-    failed_checks = len(checks) - passed_checks
-    overall_success = failed_checks == 0
-
-    report_payload = {
+    passed = sum(1 for item in checks if item["success"])
+    payload = {
         "report_name": report_name,
         "timestamp": datetime.now(UTC).isoformat(),
+        "total_rows": total_rows,
         "total_checks": len(checks),
-        "passed_checks": passed_checks,
-        "failed_checks": failed_checks,
-        "overall_success": overall_success,
+        "passed_checks": passed,
+        "failed_checks": len(checks) - passed,
+        "overall_success": passed == len(checks),
         "checks": checks,
     }
-
-    report_path = settings.paths.quality_dir / f"{report_name}.json"
-    write_json(report_path, report_payload)
-    return report_payload
+    write_json(settings.paths.quality_dir / f"{report_name}.json", payload)
+    return payload
 
 
 def build_freshness_report(df: pd.DataFrame, settings: Settings, report_path: Path | str) -> dict[str, Any]:
-    """Build freshness report payload and write JSON file."""
-    path = Path(report_path) if isinstance(report_path, str) else report_path
+    """Report valid, future and stale publication dates without string sorting."""
+    path = Path(report_path)
+    threshold = int(getattr(settings, "freshness_threshold_days", 180))
+    dates = _date_series(df)
+    valid = dates.notna()
+    ages = pd.to_numeric(df["age_days"], errors="coerce") if "age_days" in df else pd.Series(float("nan"), index=df.index)
+    age_valid = ages.notna() & valid & (ages >= 0)
+    future = int((dates > pd.Timestamp.now(tz="UTC")).fillna(False).sum())
+    stale = age_valid & (ages > threshold)
+    valid_dates = dates[valid]
+    stale_rows = int(stale.sum())
     total_rows = len(df)
-    threshold_days = getattr(settings, "freshness_threshold_days", 180)
-
-    if total_rows == 0 or "published" not in df.columns:
-        latest_published = "N/A"
-        oldest_published = "N/A"
-        stale_rows = 0
-        stale_ratio = 0.0
-        is_fresh = False
-    else:
-        pub_dates = df["published"].astype(str).tolist()
-        latest_published = max(pub_dates)
-        oldest_published = min(pub_dates)
-        if "age_days" in df.columns:
-            stale_rows = int((df["age_days"] > threshold_days).sum())
-            min_age = int(df["age_days"].min())
-        else:
-            stale_rows = 0
-            min_age = 0
-        stale_ratio = round(stale_rows / total_rows, 4)
-        is_fresh = (stale_rows == 0) and (min_age <= threshold_days)
-
     payload = {
-        "latest_published": latest_published,
-        "oldest_published": oldest_published,
-        "stale_rows": int(stale_rows),
-        "total_rows": int(total_rows),
-        "stale_ratio": float(stale_ratio),
-        "is_fresh": bool(is_fresh),
-        "freshness_threshold_days": int(threshold_days),
+        "latest_published": valid_dates.max().date().isoformat() if not valid_dates.empty else "",
+        "oldest_published": valid_dates.min().date().isoformat() if not valid_dates.empty else "",
+        "invalid_publication_dates": int((~valid).sum()),
+        "future_publication_dates": future,
+        "invalid_age_days": int((~age_valid).sum()),
+        "stale_rows": stale_rows,
+        "total_rows": total_rows,
+        "stale_ratio": float(round(stale_rows / total_rows, 4)) if total_rows else 0.0,
+        "is_fresh": bool(total_rows > 0 and valid.all() and age_valid.all() and future == 0 and stale_rows == 0),
+        "freshness_threshold_days": threshold,
     }
-
     write_json(path, payload)
     return payload
-

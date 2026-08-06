@@ -1,261 +1,76 @@
-# Day 10 - Data Pipeline & Data Observability
+# Day 10 – Data Pipeline and Data Observability Lab
 
-## Mục tiêu bài lab
+This lab builds a Crossref-backed RAG corpus, evaluates it, injects controlled data corruption, and repairs the corpus from the raw snapshot.
 
-Bài lab mô phỏng quy trình xây dựng và vận hành data pipeline cho một hệ thống RAG sử dụng dữ liệu bài báo học thuật từ Crossref.
+## Requirements
 
-Học viên sẽ thực hiện toàn bộ vòng đời dữ liệu:
+- Python 3.11–3.13
+- `uv`
+- Internet access for Crossref and the first MiniLM model download
+- A Gemini or OpenAI API key for real LLM judging and the optional agent demo
 
-- Lấy dữ liệu từ nguồn bên ngoài và lưu lại raw artifacts để có thể truy vết.
-- Làm sạch, chuẩn hóa và chuyển dữ liệu sang schema phù hợp cho embedding.
-- Tạo embedding, nạp dữ liệu vào ChromaDB và dùng corpus này để trả lời câu hỏi.
-- Xây evaluation set và đo chất lượng retrieval/câu trả lời trên dữ liệu sạch.
-- Chủ động tạo các lỗi dữ liệu như thiếu bản ghi, summary rỗng, text nhiễu, ngày cũ và duplicate.
-- Đo ảnh hưởng của dữ liệu lỗi lên chất lượng agent bằng cùng một evaluation set.
-- Repair dữ liệu từ nguồn raw, chạy đánh giá lại và so sánh ba trạng thái: baseline, corrupted và repaired.
-- Tạo data quality report, freshness report và báo cáo so sánh để phát hiện vấn đề trước khi người dùng nhận câu trả lời sai.
-
-Trọng tâm của bài không chỉ là làm cho ETL chạy được. Học viên phải **chứng minh bằng artifact và metrics rằng chất lượng dữ liệu ảnh hưởng trực tiếp đến chất lượng của RAG/agent**, đồng thời cho thấy pipeline có thể phát hiện và phục hồi sau lỗi dữ liệu.
-
-## Luồng thực hiện và đầu ra
-
-Pipeline hoàn chỉnh đi theo luồng:
-
-```text
-Crossref API
-    -> raw data
-    -> cleaned data
-    -> embedding + ChromaDB
-    -> RAG evaluation
-    -> quality/freshness reports
-    -> corrupt data
-    -> evaluate impact
-    -> repair from raw data
-    -> compare baseline/corrupted/repaired
-```
-
-Kết thúc bài lab, học viên cần có:
-
-- Baseline pipeline chạy end-to-end trên dữ liệu sạch.
-- Corruption flow tạo được dữ liệu lỗi có chủ đích.
-- Repaired pipeline phục hồi dữ liệu và chạy đánh giá lại.
-- Metrics và câu trả lời của agent ở cả ba trạng thái để đối chiếu.
-- Data quality, freshness và comparison reports trong `data/`.
-
-Xem yêu cầu chi tiết tại:
-
-- [Hướng dẫn từng bước](Guide.md)
-- [Rubric chấm điểm](Rubric.md)
-
-## 1. Yêu cầu trước khi bắt đầu
-
-- **Python 3.11, 3.12 hoặc 3.13** (theo `pyproject.toml` và `uv.lock`)
-- Khuyến nghị dùng [uv](https://docs.astral.sh/uv/getting-started/installation/) để cài đúng dependency từ lockfile
-- Internet để lấy dữ liệu từ Crossref và tải embedding model lần đầu
-- API key của ít nhất một LLM provider nếu chạy các bước có gọi LLM
-
-Nếu máy có nhiều phiên bản Python, hãy chọn Python trong khoảng 3.11-3.13 trước khi cài dependency.
-
-## 2. Cài môi trường
-
-### Cách A - Dùng uv (khuyến nghị)
-
-Tại thư mục gốc của project:
-
-```bash
-uv sync
-```
-
-`uv sync` tạo môi trường `.venv`, cài project và dependency theo `uv.lock`.
-
-### Cách B - Dùng pip
-
-Tạo và kích hoạt virtual environment.
-
-Windows PowerShell:
+Install the locked environment:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e .
+uv sync --extra dev
 ```
 
-macOS/Linux:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-```
-
-> Không chỉ chạy `pip install -r requirements.txt`: lệnh đó cài các thư viện nhưng không cài package nằm trong `src/`.  ` cài cả project và dependency cần thiết.
-
-## 3. Cấu hình `.env`
-
-Tạo `.env` từ file mẫu.
-
-Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-macOS/Linux:
-
-```bash
-cp .env.example .env
-```
-
-Mặc định project dùng Gemini:
+Create `.env` from `.env.example`. The default provider is Gemini:
 
 ```dotenv
 LLM_PROVIDER=gemini
 LLM_MODEL=gemini-3.5-flash-lite
 GOOGLE_API_KEY=
+REQUIRE_LLM_JUDGE=1
 ```
 
-Nếu tài khoản chưa có model mặc định, có thể đổi sang fallback `LLM_MODEL=gemini-3.1-flash-lite` (không dùng hậu tố `-preview`).
+For OpenAI, set `LLM_PROVIDER=openai`, choose a model available to the account, and provide `OPENAI_API_KEY`. Only the selected provider needs a credential. Never commit `.env` or a key.
 
-Project cũng hỗ trợ `openai`, `anthropic`, `openrouter`, `ollama` và OpenAI-compatible custom endpoint. Chỉ điền credential của provider bạn sử dụng.
+## Run the lab
 
-Chỉ cần cấu hình key của provider đang chọn. Với OpenAI, dùng:
-
-```dotenv
-LLM_PROVIDER=openai
-LLM_MODEL=<an OpenAI model available to the account>
-OPENAI_API_KEY=
-```
-
-Không commit `.env` hoặc API key. `RUN_RAGAS=0` và `RUN_AGENT_DEMO=0` nên được giữ mặc định để tránh API calls và chi phí không cần thiết. Chạy baseline (`script/run_phase1.py`) trước `script/run_corruption_flow.py`. Embedding vẫn dùng MiniLM local, không dùng Gemini/OpenAI.
-
-Không commit `.env`, API key hoặc secret lên GitHub.
-
-## 4. Hiểu starter trước khi code
-
-Các thư mục chính:
-
-| Thư mục              | Chức năng                                       |
-| ---------------------- | ------------------------------------------------- |
-| `src/core/`          | Cấu hình, đường dẫn và utility dùng chung |
-| `src/ingestion/`     | Lấy dữ liệu Crossref, cleaning và corruption  |
-| `src/retrieval/`     | Embedding, ChromaDB, LLM providers và agent      |
-| `src/evaluation/`    | Tạo test set và tính metrics                   |
-| `src/observability/` | Data quality, freshness và báo cáo             |
-| `src/pipelines/`     | Điều phối baseline flow và corruption flow    |
-| `script/`            | Hai entrypoint để chạy pipeline                |
-| `data/`              | Artifact sinh ra khi chạy lab                    |
-
-Starter cố ý chứa `TODO(student)` và `NotImplementedError`. Đây là trạng thái mong đợi, không phải lỗi setup.
-
-Tìm tất cả phần cần hoàn thành:
-
-```bash
-rg -n "TODO\(student\)|NotImplementedError" src
-```
-
-Nếu chưa cài `rg`, dùng một trong các lệnh sau.
-
-Windows PowerShell:
+Always run baseline before corruption:
 
 ```powershell
-Get-ChildItem src -Recurse -Filter *.py | Select-String -Pattern 'TODO\(student\)|NotImplementedError'
-```
-
-macOS/Linux:
-
-```bash
-grep -RInE 'TODO\(student\)|NotImplementedError' src
-```
-
-Hoặc dùng chức năng Search của VS Code với từ khóa `TODO(student)`.
-
-## 5. Thứ tự thực hiện
-
-### Pha 1 - Baseline với dữ liệu sạch
-
-1. Implement Crossref ingestion trong `src/ingestion/crossref.py`.
-2. Implement cleaning trong `src/ingestion/cleaning.py`.
-3. Tạo evaluation set trong `src/evaluation/testset.py`.
-4. Implement quality/freshness checks và report trong `src/observability/`.
-5. Ghép các bước trong `src/pipelines/phase1.py`.
-6. Chạy baseline:
-
-```bash
+$env:REFRESH_SOURCE="1"
+$env:REFRESH_TEST_SET="1"
+$env:RUN_RAGAS="0"
+$env:RUN_AGENT_DEMO="1"
+$env:REQUIRE_LLM_JUDGE="1"
 uv run python script/run_phase1.py
 ```
 
-Nếu dùng pip và đã kích hoạt `.venv`:
+Then run corruption and repair with the same evaluation set:
 
-```bash
-python script/run_phase1.py
-```
-
-### Pha 2 - Corruption, repair và comparison
-
-Chỉ bắt đầu pha này sau khi baseline chạy thành công.
-
-1. Implement corruption trong `src/ingestion/corruption.py`.
-2. Ghép corruption, evaluation, repair và comparison trong `src/pipelines/corruption_flow.py`.
-3. Chạy flow:
-
-```bash
+```powershell
+$env:REFRESH_SOURCE="0"
+$env:REFRESH_TEST_SET="0"
+$env:RUN_RAGAS="0"
+$env:RUN_AGENT_DEMO="0"
+$env:REQUIRE_LLM_JUDGE="1"
 uv run python script/run_corruption_flow.py
 ```
 
-Nếu dùng pip:
+Enable the real Ragas pass only after the core flows are healthy:
 
-```bash
-python script/run_corruption_flow.py
+```powershell
+$env:RUN_RAGAS="1"
+$env:REQUIRE_LLM_JUDGE="1"
+uv run python script/run_phase1.py
+uv run python script/run_corruption_flow.py
 ```
 
-## 6. Kiểm tra kết quả
+`REQUIRE_LLM_JUDGE=1` prevents silent heuristic fallback. `RUN_RAGAS=1` reports a failure instead of treating an incompatible dependency or API error as a pass.
 
-Sau baseline, tối thiểu cần kiểm tra:
+## Artifacts
 
-- `data/raw/`: raw response và records từ Crossref
-- `data/clean/`: cleaned CSV/JSON
-- `data/embeddings/`: embedding manifest
-- `data/eval/`: evaluation test set
-- `data/results/baseline_metrics.json`: metrics của baseline
-- `data/quality/`: data quality và freshness report
-- `data/reports/phase1_report.md`: báo cáo baseline
+The pipeline writes raw Crossref response/records, clean CSV/JSON, local MiniLM embeddings and Chroma data, the shared evaluation set, baseline/corrupted/repaired answers and metrics, quality/freshness JSON, and Markdown reports under `data/`. Repair reads `data/raw/crossref_records.json` and reruns cleaning; it does not copy the baseline clean CSV.
 
-Sau corruption flow, kiểm tra thêm:
+`data/chroma/`, `.env`, `job.txt`, caches and Python bytecode are intentionally ignored. Team member names and assignments remain a placeholder until supplied.
 
-- corrupted/repaired dataset và metrics trong `data/`
-- `data/results/corruption_log.json`
-- `data/reports/corruption_report.md`
+## Checks
 
-Các chỉ số trọng tâm:
-
-- `retrieval_hit_rate`
-- `mean_token_f1`
-- `judge_accuracy`
-- `mean_judge_score`
-- trạng thái data quality và freshness
-
-Mục tiêu không chỉ là pipeline chạy xong, mà phải có bằng chứng cho thấy data corruption làm thay đổi chất lượng agent và repair giúp khôi phục chất lượng.
-
-## 7. Lỗi setup thường gặp
-
-| Triệu chứng                                         | Nguyên nhân thường gặp                          | Cách kiểm tra/xử lý                                                             |
-| ----------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `requires a different Python`                       | Python nằm ngoài khoảng 3.11-3.13                 | Chạy`python --version`, chọn Python phù hợp rồi tạo lại `.venv`          |
-| `No module named 'pipelines'`                       | Mới cài`requirements.txt`, chưa cài project    | Trong`.venv`, chạy `python -m pip install -e .`                                |
-| `GOOGLE_API_KEY is required`                        | Provider mặc định là Gemini nhưng chưa có key | Điền`GOOGLE_API_KEY` hoặc đổi `LLM_PROVIDER` sang provider đã cấu hình |
-| `NotImplementedError: Student task...`              | Chạm tới phần starter chưa implement             | Mở đúng file được ghi trong traceback và hoàn thành`TODO(student)`       |
-| Crossref trả`429`/`503`                          | Rate limit hoặc lỗi tạm thời                     | Implement retry/backoff theo yêu cầu trong`src/ingestion/crossref.py`           |
-| Chạy corruption flow nhưng thiếu baseline artifact | Chưa chạy xong Pha 1                               | Chạy baseline và kiểm tra`data/results/baseline_metrics.json` trước          |
-
-## 8. Checklist trước khi nộp
-
-- [ ] Cài đặt được trên môi trường sạch bằng một trong hai cách ở trên
-- [ ] Baseline pipeline chạy end-to-end
-- [ ] Corruption flow chạy sau baseline
-- [ ] Có đầy đủ raw, clean, embedding, evaluation, quality và report artifacts
-- [ ] Metrics/report khớp với artifact thực tế
-- [ ] Chứng minh được before/corrupted/repaired bằng số liệu
-- [ ] Không có API key hoặc `.env` trong Git
-- [ ] Đã đối chiếu [Rubric.md](Rubric.md)
+```powershell
+uv run pytest -q
+python -m compileall src
+git diff --check
+```

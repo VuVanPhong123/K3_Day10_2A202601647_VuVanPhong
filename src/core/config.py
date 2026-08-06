@@ -62,6 +62,7 @@ class Settings:
     source_query: str
     source_filter: str
     max_results: int
+    min_clean_records: int
     top_k: int
     freshness_threshold_days: int
     refresh_source: bool
@@ -131,6 +132,7 @@ def load_settings(project_dir: Path | None = None) -> Settings:
         source_query="agentic retrieval augmented generation large language model",
         source_filter=f"from-pub-date:{source_from_date},has-abstract:true",
         max_results=24,
+        min_clean_records=int(os.getenv("MIN_CLEAN_RECORDS", "3")),
         top_k=4,
         freshness_threshold_days=freshness_threshold_days,
         refresh_source=os.getenv("REFRESH_SOURCE", "").lower() in {"1", "true", "yes"},

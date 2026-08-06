@@ -1,18 +1,19 @@
 {
-  "report_name": "test_corrupted_quality",
-  "timestamp": "2026-08-06T03:56:36.511337+00:00",
-  "total_checks": 9,
-  "passed_checks": 6,
-  "failed_checks": 3,
-  "overall_success": false,
+  "report_name": "baseline",
+  "timestamp": "2026-08-06T04:30:39.790941+00:00",
+  "total_rows": 24,
+  "total_checks": 11,
+  "passed_checks": 11,
+  "failed_checks": 0,
+  "overall_success": true,
   "checks": [
     {
       "name": "row_count_sufficient",
       "success": true,
       "observed": 24,
-      "expected": 24,
+      "expected": 3,
       "details": {
-        "description": "Expected at least 24 rows"
+        "description": "Minimum clean rows required to build an evaluation set"
       }
     },
     {
@@ -20,37 +21,29 @@
       "success": true,
       "observed": 24,
       "expected": 24,
-      "details": {
-        "null_count": 0
-      }
+      "details": {}
     },
     {
       "name": "paper_id_unique",
-      "success": false,
-      "observed": 23,
+      "success": true,
+      "observed": 24,
       "expected": 24,
-      "details": {
-        "unique_count": 23,
-        "total_rows": 24
-      }
+      "details": {}
     },
     {
       "name": "title_not_empty",
       "success": true,
       "observed": 24,
       "expected": 24,
-      "details": {
-        "empty_title_count": 0
-      }
+      "details": {}
     },
     {
       "name": "summary_sufficient_length",
-      "success": false,
-      "observed": 23,
+      "success": true,
+      "observed": 24,
       "expected": 24,
       "details": {
-        "min_required_length": 100,
-        "valid_count": 23
+        "min_required_length": 100
       }
     },
     {
@@ -58,18 +51,32 @@
       "success": true,
       "observed": 24,
       "expected": 24,
-      "details": {
-        "empty_count": 0
-      }
+      "details": {}
     },
     {
       "name": "no_duplicate_rows",
-      "success": false,
-      "observed": 1,
+      "success": true,
+      "observed": 0,
       "expected": 0,
       "details": {
-        "duplicate_row_count": 1
+        "fingerprint": "normalized title, summary, published and authors_joined"
       }
+    },
+    {
+      "name": "published_date_valid",
+      "success": true,
+      "observed": 24,
+      "expected": 24,
+      "details": {
+        "future_dates": 0
+      }
+    },
+    {
+      "name": "age_days_valid",
+      "success": true,
+      "observed": 24,
+      "expected": 24,
+      "details": {}
     },
     {
       "name": "stale_records_ratio",
@@ -78,14 +85,13 @@
       "expected": 0.0,
       "details": {
         "stale_rows": 0,
-        "total_rows": 24,
         "threshold_days": 180
       }
     },
     {
       "name": "latest_pub_date_fresh",
       "success": true,
-      "observed": 10,
+      "observed": 5,
       "expected": 180,
       "details": {
         "threshold_days": 180

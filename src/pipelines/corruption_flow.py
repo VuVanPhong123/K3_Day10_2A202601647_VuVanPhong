@@ -11,7 +11,7 @@ from ingestion.cleaning import build_clean_dataframe
 from ingestion.corruption import corrupt_clean_dataframe
 from ingestion.crossref import load_raw_records
 from observability.quality import build_freshness_report, run_data_quality_checks
-from observability.reporting import generate_corruption_report
+from observability.reporting import generate_corruption_report, generate_final_lab_report
 from retrieval.index import LocalEmbeddingIndex
 
 
@@ -38,10 +38,26 @@ def main() -> None:
     settings = load_settings()
     _require_baseline_artifacts(settings)
 
-    baseline_df = pd.read_csv(settings.paths.clean_csv)
+    baseline_df = pd.read_csv(settings.paths.clean_csv, keep_default_na=False)
     baseline_metrics = read_json(settings.paths.baseline_metrics)
+    baseline_quality_path = settings.paths.quality_dir / "baseline.json"
+    baseline_quality = read_json(baseline_quality_path) if baseline_quality_path.exists() else {}
+    baseline_freshness = read_json(settings.paths.freshness_report) if settings.paths.freshness_report.exists() else {}
+    test_set = read_json(settings.paths.eval_testset)
+    target_doc_ids = {
+        str(doc_id)
+        for item in test_set
+        for doc_id in item.get("ground_truth_doc_ids", [])
+    }
 
-    corrupted_df = corrupt_clean_dataframe(baseline_df, settings.paths.corruption_log)
+    if target_doc_ids:
+        corrupted_df = corrupt_clean_dataframe(
+            baseline_df,
+            settings.paths.corruption_log,
+            target_doc_ids=target_doc_ids,
+        )
+    else:
+        corrupted_df = corrupt_clean_dataframe(baseline_df, settings.paths.corruption_log)
     if corrupted_df.empty:
         raise RuntimeError("Corruption produced an empty dataframe.")
     _save_dataframe(
@@ -104,8 +120,50 @@ def main() -> None:
         repaired_quality=repaired_quality,
         corrupted_freshness=corrupted_freshness,
         repaired_freshness=repaired_freshness,
+        baseline_quality=baseline_quality,
+        baseline_freshness=baseline_freshness,
+        corruption_log=read_json(settings.paths.corruption_log) if settings.paths.corruption_log.exists() else [],
+    )
+
+    generate_final_lab_report(
+        settings.paths.project_dir / "data" / "reports" / "final_lab_report.md",
+        {
+            "source_summary": {
+                "source_api": settings.source_api,
+                "source_query": settings.source_query,
+                "source_filter": settings.source_filter,
+            },
+            "baseline_metrics": baseline_metrics,
+            "corrupted_metrics": corrupted_bundle.summary,
+            "repaired_metrics": repaired_bundle.summary,
+            "clean_rows": len(baseline_df),
+            "test_set_size": len(test_set),
+            "embedding_model": settings.embedding_model,
+            "quality_comparison": {
+                "baseline": baseline_quality,
+                "corrupted": corrupted_quality,
+                "repaired": repaired_quality,
+            },
+            "freshness_comparison": {
+                "baseline": baseline_freshness,
+                "corrupted": corrupted_freshness,
+                "repaired": repaired_freshness,
+            },
+            "artifact_paths": [
+                str(settings.paths.raw_api_response),
+                str(settings.paths.raw_records_json),
+                str(settings.paths.clean_csv),
+                str(settings.paths.eval_testset),
+                str(settings.paths.comparison_report),
+            ],
+        },
     )
 
     print(f"Corrupted metrics: {settings.paths.corrupted_metrics}")
     print(f"Repaired metrics: {settings.paths.repaired_metrics}")
     print(f"Comparison report: {settings.paths.comparison_report}")
+    if settings.paths.corrupted_metrics.exists() and settings.paths.repaired_metrics.exists():
+        corrupted_ragas = corrupted_bundle.summary.get("ragas", {})
+        repaired_ragas = repaired_bundle.summary.get("ragas", {})
+        if any(item.get("status") == "failed" for item in (corrupted_ragas, repaired_ragas)):
+            raise RuntimeError("Ragas evaluation failed in corruption flow; see metrics artifacts and report.")

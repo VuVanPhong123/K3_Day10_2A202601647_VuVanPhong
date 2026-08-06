@@ -6,7 +6,7 @@ from observability.quality import build_freshness_report, run_data_quality_check
 
 
 def test_run_data_quality_checks(tmp_path: Path):
-    settings = load_settings()
+    settings = load_settings(project_dir=tmp_path)
 
     # Synthetic clean dataframe
     clean_data = [
@@ -25,7 +25,7 @@ def test_run_data_quality_checks(tmp_path: Path):
 
     report = run_data_quality_checks(df_clean, settings, "test_baseline_quality")
     assert report["overall_success"] is True
-    assert report["passed_checks"] == 9
+    assert report["passed_checks"] == 11
     assert report["failed_checks"] == 0
 
     # Synthetic corrupted dataframe with duplicates & short summary
@@ -40,7 +40,7 @@ def test_run_data_quality_checks(tmp_path: Path):
 
 
 def test_build_freshness_report(tmp_path: Path):
-    settings = load_settings()
+    settings = load_settings(project_dir=tmp_path)
     df_fresh = pd.DataFrame(
         [
             {"published": "2026-06-01", "age_days": 20},
@@ -55,3 +55,22 @@ def test_build_freshness_report(tmp_path: Path):
     assert freshness["latest_published"] == "2026-06-01"
     assert freshness["stale_rows"] == 0
     assert report_path.exists()
+
+
+def test_invalid_date_is_not_fresh_and_content_duplicate_fails(tmp_path: Path):
+    settings = load_settings(project_dir=tmp_path)
+    summary = "A sufficiently long abstract " * 8
+    frame = pd.DataFrame([
+        {"paper_id": "p1", "title": "Same", "summary": summary, "published": "not-a-date", "age_days": -1, "summary_chars": len(summary), "text_for_embedding": "x"},
+        {"paper_id": "p2", "title": "Same", "summary": summary, "published": "2026-06-01", "age_days": 10, "summary_chars": len(summary), "text_for_embedding": "x"},
+        {"paper_id": "p3", "title": "Same", "summary": summary, "published": "2026-06-01", "age_days": 10, "summary_chars": len(summary), "text_for_embedding": "x"},
+    ])
+    quality = run_data_quality_checks(frame, settings, "invalid_date")
+    names = {check["name"]: check for check in quality["checks"]}
+    assert not names["published_date_valid"]["success"]
+    assert not names["age_days_valid"]["success"]
+    assert not names["no_duplicate_rows"]["success"]
+
+    freshness = build_freshness_report(frame, settings, tmp_path / "freshness.json")
+    assert freshness["invalid_publication_dates"] == 1
+    assert freshness["is_fresh"] is False

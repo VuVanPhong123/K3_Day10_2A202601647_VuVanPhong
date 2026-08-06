@@ -1,0 +1,14 @@
+{
+  "samples": 12,
+  "retrieval_hit_rate": 1.0,
+  "mean_token_f1": 0.75,
+  "judge_accuracy": 0.75,
+  "mean_judge_score": 4,
+  "judge_provider": "gemini",
+  "judge_model": "gemini-3.5-flash-lite",
+  "llm_judge_success_count": 12,
+  "llm_judge_fallback_count": 0,
+  "ragas": {
+    "skipped": "Set RUN_RAGAS=1 to enable the slower Ragas pass."
+  }
+}

@@ -1,28 +1,39 @@
 # Data Corruption & Pipeline Repair Comparison Report
 
-## 1. Metrics Comparison (Absolute & Delta)
+## Corruption Scenarios
+- Scenarios recorded: `7`
+- Affected document IDs: `13`
 
-| Metric | Baseline | Corrupted | Repaired | Corrupted Delta | Repaired Delta |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| `retrieval_hit_rate` | 0.9167 | 0.4167 | 0.9167 | `-0.5000` | `+0.0000` |
-| `mean_token_f1` | 0.8523 | 0.3850 | 0.8523 | `-0.4673` | `+0.0000` |
-| `judge_accuracy` | 0.9167 | 0.4167 | 0.9167 | `-0.5000` | `+0.0000` |
-| `mean_judge_score` | 4.5833 | 2.1500 | 4.5833 | `-2.4333` | `+0.0000` |
+## Metrics Comparison (Corrupted Delta and Repaired Delta)
+| Metric | Baseline | Corrupted | Repaired | Corrupted Δ | Repaired Δ |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| `samples` | `12` | `12` | `12` | `+0.0000` | `+0.0000` |
+| `retrieval_hit_rate` | `1.0000` | `0.2500` | `1.0000` | `-0.7500` | `+0.0000` |
+| `mean_token_f1` | `0.7500` | `0.0325` | `0.7500` | `-0.7175` | `+0.0000` |
+| `judge_accuracy` | `0.7500` | `0.0000` | `0.7500` | `-0.7500` | `+0.0000` |
+| `mean_judge_score` | `4` | `1` | `4` | `-3.0000` | `+0.0000` |
+| `judge_provider` | `gemini` | `gemini` | `gemini` | `` | `` |
+| `judge_model` | `gemini-3.5-flash-lite` | `gemini-3.5-flash-lite` | `gemini-3.5-flash-lite` | `` | `` |
+| `llm_judge_success_count` | `12` | `12` | `12` | `+0.0000` | `+0.0000` |
+| `llm_judge_fallback_count` | `0` | `0` | `0` | `+0.0000` | `+0.0000` |
+| `ragas` | `{'skipped': 'Set RUN_RAGAS=1 to enable the slower Ragas pass.'}` | `{'skipped': 'Set RUN_RAGAS=1 to enable the slower Ragas pass.'}` | `{'skipped': 'Set RUN_RAGAS=1 to enable the slower Ragas pass.'}` | `` | `` |
 
-## 2. Data Quality Checks Comparison
+## Data Quality Comparison
+| State | Status | Passed | Failed | Rows |
+| :--- | :--- | ---: | ---: | ---: |
+| **Baseline** | `PASS` | `11` | `0` | `24` |
+| **Corrupted** | `FAIL` | `8` | `3` | `26` |
+| **Repaired** | `PASS` | `11` | `0` | `24` |
 
-| State | Overall Status | Passed Checks | Failed Checks |
-| :--- | :--- | :--- | :--- |
-| **Corrupted** | FAILED ❌ | 5 | 4 |
-| **Repaired** | PASSED ✅ | 9 | 0 |
+## Freshness Comparison
+| State | Status | Latest | Stale ratio | Invalid dates |
+| :--- | :--- | :--- | ---: | ---: |
+| **Baseline** | `PASS` | `2026-08-01` | `0.0000` | `0` |
+| **Corrupted** | `FAIL` | `2026-07-03` | `0.3077` | `0` |
+| **Repaired** | `PASS` | `2026-08-01` | `0.0000` | `0` |
 
-## 3. Freshness Comparison
-
-| State | Freshness Status | Latest Published | Stale Ratio |
-| :--- | :--- | :--- | :--- |
-| **Corrupted** | STALE ⚠️ | `2024-01-01` | `0.5000` |
-| **Repaired** | FRESH ✅ | `2026-08-01` | `0.0000` |
-
-## 4. Analysis & Executive Summary
-- **Impact of Corruption**: Injecting noise, truncation, blank abstracts, and stale dates severely degrades retrieval accuracy and LLM answer quality.
-- **Recovery via Repair**: Re-ingesting and cleaning raw data from the authoritative source restores data quality checks to 100% success and recovers RAG agent accuracy back to baseline levels.
+## Evidence-based Conclusion
+- Corruption reduced: `retrieval_hit_rate, mean_token_f1, judge_accuracy, mean_judge_score`.
+- Repair improved over corrupted for: `retrieval_hit_rate, mean_token_f1, judge_accuracy, mean_judge_score`.
+- Quality status: baseline `PASS`, corrupted `FAIL`, repaired `PASS`.
+- Repair input was the raw-record snapshot and the clean transformation was rerun.
