@@ -108,12 +108,18 @@ def test_truncate_title_keeps_non_empty_prefix(
 def test_stale_publication_date_moves_dates_back(
     clean_dataframe: pd.DataFrame,
 ) -> None:
-    result = _stale_publication_date(clean_dataframe, ratio=1, seed=42)
+    result = _stale_publication_date(
+        clean_dataframe,
+        ratio=1,
+        min_years=3,
+        max_years=3,
+        seed=42,
+    )
 
     original_dates = pd.to_datetime(clean_dataframe["published"])
     stale_dates = pd.to_datetime(result["published"])
     assert (stale_dates < original_dates).all()
-    assert ((original_dates - stale_dates).dt.days >= 1095).all()
+    assert stale_dates.equals(original_dates - pd.DateOffset(years=3))
     assert (pd.to_datetime(result["updated"]) < pd.to_datetime(clean_dataframe["updated"])).all()
 
 
@@ -227,7 +233,7 @@ def test_corruption_log_has_required_schema_and_quality_failure(
             "affected_paper_ids",
             "fields_changed",
         }.issubset(record)
-    for record in records[:-1]:
+    for record in records:
         assert {"before", "after"}.issubset(record)
     assert (result["summary"] == "").any()
     assert (result["summary_chars"] == result["summary"].str.len()).all()

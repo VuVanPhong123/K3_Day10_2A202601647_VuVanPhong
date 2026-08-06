@@ -250,11 +250,15 @@ def _stale_publication_date(
     target_doc_ids: set[str] | None = None,
     *,
     ratio: float = 0.20,
+    min_years: int = 3,
+    max_years: int = 5,
     rng: random.Random | None = None,
     seed: int = 42,
 ) -> pd.DataFrame:
     """Move publication and available update dates three to five years back."""
     _validate_ratio("stale_ratio", ratio)
+    if min_years < 1 or max_years < min_years:
+        raise ValueError("stale year bounds must satisfy 1 <= min_years <= max_years")
     result = df.copy(deep=True)
     if result.empty or ratio == 0:
         return result
@@ -269,7 +273,7 @@ def _stale_publication_date(
     published_column = result.columns.get_loc("published")
     updated_column = result.columns.get_loc("updated")
     for position in positions:
-        years = local_rng.randint(3, 5)
+        years = local_rng.randint(min_years, max_years)
         result.iat[position, published_column] = _stale_value(
             result.iat[position, published_column], years
         )
@@ -598,6 +602,8 @@ def corrupt_clean_dataframe(
     truncate_ratio: float = 0.15,
     title_length: int = 10,
     stale_ratio: float = 0.20,
+    stale_min_years: int = 3,
+    stale_max_years: int = 5,
     duplicate_ratio: float = 0.10,
     duplicate_min_rows: int = 2,
 ) -> pd.DataFrame:
@@ -618,6 +624,10 @@ def corrupt_clean_dataframe(
         raise ValueError("title_length must be positive")
     if duplicate_min_rows < 1:
         raise ValueError("duplicate_min_rows must be positive")
+    if stale_min_years < 1 or stale_max_years < stale_min_years:
+        raise ValueError(
+            "stale year bounds must satisfy 1 <= stale_min_years <= stale_max_years"
+        )
 
     target_ids = _normalise_target_ids(target_doc_ids)
     result = df.copy(deep=True)
@@ -706,6 +716,8 @@ def corrupt_clean_dataframe(
         result,
         target_ids,
         ratio=stale_ratio,
+        min_years=stale_min_years,
+        max_years=stale_max_years,
         rng=rng,
     )
     stale_fields = ["published"]
@@ -752,6 +764,8 @@ def corrupt_clean_dataframe(
                 for field in ("row", "summary", "title", "published", "updated", "paper_id")
                 if any(field in record["fields_changed"] for record in records)
             ],
+            "before": {},
+            "after": {},
         }
     )
     _write_log(output_log_path, records)
