@@ -13,11 +13,13 @@ def build_llm(settings: Settings, temperature: float = 0.0):
     require_llm_credentials(settings)
 
     if provider == "gemini":
-        return ChatGoogleGenerativeAI(
-            model=settings.model_name,
-            google_api_key=settings.google_api_key,
-            temperature=temperature,
-        )
+        kwargs = {
+            "model": settings.model_name,
+            "google_api_key": settings.google_api_key,
+        }
+        if not settings.model_name.startswith("gemini-3"):
+            kwargs["temperature"] = temperature
+        return ChatGoogleGenerativeAI(**kwargs)
     if provider == "openai":
         return ChatOpenAI(
             model=settings.model_name,
