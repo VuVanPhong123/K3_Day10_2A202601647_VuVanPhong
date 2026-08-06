@@ -79,7 +79,7 @@ Các chức năng này hiện đều là TODO độc lập.
 
 ---
 
-## Người 2 — Cleaning và evaluation test set(Minh)
+## Người 2 — Cleaning và evaluation test set(Vinh)
 
 **Branch**
 
