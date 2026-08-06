@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import asyncio
 import math
+import time
 from importlib.metadata import version as package_version
 from statistics import mean
 import os
@@ -88,7 +89,9 @@ def _run_ragas(settings: Settings, answers: list[dict[str, Any]]) -> dict[str, A
             sys.modules["langchain_community.chat_models.vertexai"] = shim
         from ragas import evaluate
         from ragas.embeddings.base import BaseRagasEmbeddings
+        from ragas.llms.base import LangchainLLMWrapper
         from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
+        from ragas.run_config import RunConfig
 
         dataset = Dataset.from_dict(
             {
@@ -117,14 +120,47 @@ def _run_ragas(settings: Settings, answers: list[dict[str, Any]]) -> dict[str, A
             async def aembed_documents(self, texts: list[str]) -> list[list[float]]:
                 return await asyncio.to_thread(self.embed_documents, texts)
 
+        class QuotaPacedRagasLLM(LangchainLLMWrapper):
+            """Serialize Gemini requests below its free-tier per-minute limit."""
+
+            def __init__(self, *args: Any, requests_per_minute: int, **kwargs: Any):
+                super().__init__(*args, bypass_n=True, **kwargs)
+                self._min_interval = 60.0 / max(1, requests_per_minute)
+                self._last_started = 0.0
+                self._request_lock = asyncio.Lock()
+
+            async def agenerate_text(self, *args: Any, **kwargs: Any):
+                # Ragas often requests n=3; Gemini returns one response and
+                # accounts each prompt against the quota. One response is
+                # sufficient for these metrics and prevents a hidden 3x burst.
+                kwargs["n"] = 1
+                async with self._request_lock:
+                    delay = self._min_interval - (time.monotonic() - self._last_started)
+                    if delay > 0:
+                        await asyncio.sleep(delay)
+                    self._last_started = time.monotonic()
+                    return await super().agenerate_text(*args, **kwargs)
+
         # Ragas 0.4.x's legacy metrics call embed_query while its abstract
         # base class requires async methods. Implement both on a native Ragas
         # adapter so no LangChain usage event receives a model object.
         result = evaluate(
             dataset,
             metrics=[answer_relevancy, context_precision, context_recall, faithfulness],
-            llm=build_llm(settings=settings, temperature=0.0),
+            llm=QuotaPacedRagasLLM(
+                build_llm(settings=settings, temperature=0.0),
+                requests_per_minute=int(os.getenv("RAGAS_REQUESTS_PER_MINUTE", "12")),
+            ),
             embeddings=MiniLMRagasEmbeddings(settings.embedding_model),
+            # Gemini is rate-limited more aggressively than Ragas' default
+            # 16-way fan-out. Serial execution makes the full lab run slower
+            # but avoids request bursts, invalid classifications and timeouts.
+            run_config=RunConfig(
+                timeout=int(os.getenv("RAGAS_TIMEOUT_SECONDS", "60")),
+                max_retries=int(os.getenv("RAGAS_MAX_RETRIES", "2")),
+                max_wait=int(os.getenv("RAGAS_MAX_WAIT_SECONDS", "10")),
+                max_workers=int(os.getenv("RAGAS_MAX_WORKERS", "4")),
+            ),
         )
         scores = getattr(result, "scores", [])
         values: dict[str, Any] = {}

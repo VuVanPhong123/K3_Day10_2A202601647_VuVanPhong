@@ -1,7 +1,7 @@
 # Baseline Pipeline Report (Phase 1)
 
 ## Run Metadata
-- Timestamp (UTC): `2026-08-06T12:01:43Z`
+- Timestamp (UTC): ``
 - LLM provider/model: `gemini` / `gemini-3.5-flash-lite`
 - Embedding model: `sentence-transformers/all-MiniLM-L6-v2`
 - Chroma collection: `papers-baseline`
@@ -35,7 +35,7 @@
 - Heuristic fallbacks: `0`
 
 ## Ragas
-`{'status': 'failed', 'error': 'Ragas returned invalid metrics: answer_relevancy, context_precision, context_recall, faithfulness'}`
+`{'answer_relevancy': 0.18087860467972816, 'status': 'failed', 'error': 'Ragas returned invalid metrics: context_precision, context_recall, faithfulness', 'dependency_version': '0.4.3'}`
 
 ## Data Quality
 - Status: `PASS`

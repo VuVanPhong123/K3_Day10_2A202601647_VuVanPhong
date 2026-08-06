@@ -9,7 +9,9 @@
   "llm_judge_success_count": 12,
   "llm_judge_fallback_count": 0,
   "ragas": {
+    "answer_relevancy": 0.18087860467972816,
     "status": "failed",
-    "error": "Ragas returned invalid metrics: answer_relevancy, context_precision, context_recall, faithfulness"
+    "error": "Ragas returned invalid metrics: context_precision, context_recall, faithfulness",
+    "dependency_version": "0.4.3"
   }
 }
