@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import asyncio
 import math
 import time
@@ -89,16 +89,82 @@ def _run_ragas(settings: Settings, answers: list[dict[str, Any]]) -> dict[str, A
             sys.modules["langchain_community.chat_models.vertexai"] = shim
         from ragas import evaluate
         from ragas.embeddings.base import BaseRagasEmbeddings
-        from ragas.llms.base import LangchainLLMWrapper
+        from ragas.llms.base import BaseRagasLLM, LangchainLLMWrapper
         from ragas.metrics import answer_relevancy, context_precision, context_recall, faithfulness
         from ragas.run_config import RunConfig
 
+        # The legacy Ragas metrics use permissive prompts.  Gemini can return
+        # a schema-valid but empty classification list for terse answers such
+        # as a date, title, or author list; Ragas then turns that into NaN.
+        # Make the contract explicit at the source instead of accepting or
+        # masking an invalid metric result.
+        answer_relevancy.question_generation.instruction = (
+            "Return exactly one question that the response directly answers. "
+            "Treat a title, date, person name, identifier, or short phrase as "
+            "a committal answer. Return only the required JSON object; never "
+            "return Markdown, an empty question, or an empty object."
+        )
+        answer_relevancy.strictness = 1
+        context_precision.context_precision_prompt.instruction = (
+            "Decide whether this one context passage contains information that "
+            "supports the given answer to the question. Return exactly one JSON "
+            "object matching the schema: a non-empty reason and verdict as the "
+            "integer 0 or 1. A date, title, identifier, author name, or short "
+            "phrase is still an answer. Return JSON only, with no Markdown."
+        )
+        context_recall.context_recall_prompt.instruction = (
+            "Split the reference answer into its atomic factual claims. Return "
+            "a non-empty classifications array with exactly one JSON object for "
+            "every claim, including a single date, title, identifier, name, or "
+            "short phrase. Each object must preserve the claim in statement, "
+            "include a non-empty reason, and set attributed to integer 0 or 1. "
+            "Return JSON only; never return an empty array or Markdown."
+        )
+        faithfulness.statement_generator_prompt.instruction = (
+            "Split the answer into atomic factual statements. Always return a "
+            "non-empty statements array when the answer is non-empty; a date, "
+            "title, identifier, author name, or short phrase is one statement. "
+            "Return JSON only, with no Markdown or prose outside the schema."
+        )
+        faithfulness.nli_statements_prompt.instruction = (
+            "For every supplied statement, return exactly one item in the "
+            "statements array. Preserve the original statement verbatim, give a "
+            "non-empty reason, and use verdict integer 1 only when the context "
+            "directly supports it, otherwise 0. The output array must never be "
+            "empty when input statements are present. Return JSON only, with no "
+            "Markdown or prose outside the schema."
+        )
+
+        # Ragas' LLM metrics are mathematically undefined for an empty
+        # response/reference (Faithfulness explicitly requires a response).
+        # Keep those samples in the lab's deterministic metrics, but exclude
+        # them from this optional Ragas pass and report the exclusion plainly.
+        ragas_answers: list[dict[str, Any]] = []
+        skipped_samples: list[dict[str, str]] = []
+        for item in answers:
+            if not normalize_whitespace(str(item.get("answer", ""))):
+                skipped_samples.append({"id": str(item.get("id", "unknown")), "reason": "empty_answer"})
+            elif not normalize_whitespace(str(item.get("ground_truth", ""))):
+                skipped_samples.append({"id": str(item.get("id", "unknown")), "reason": "empty_ground_truth"})
+            elif not item.get("retrieved_contexts"):
+                skipped_samples.append({"id": str(item.get("id", "unknown")), "reason": "empty_contexts"})
+            else:
+                ragas_answers.append(item)
+        if not ragas_answers:
+            return {
+                "status": "failed",
+                "error": "No Ragas-eligible samples: answer, reference, and contexts are required.",
+                "evaluated_sample_count": 0,
+                "skipped_samples": skipped_samples,
+                "dependency_version": package_version("ragas"),
+            }
+
         dataset = Dataset.from_dict(
             {
-                "question": [item["question"] for item in answers],
-                "answer": [item["answer"] for item in answers],
-                "ground_truth": [item["ground_truth"] for item in answers],
-                "contexts": [item["retrieved_contexts"] for item in answers],
+                "question": [item["question"] for item in ragas_answers],
+                "answer": [item["answer"] for item in ragas_answers],
+                "ground_truth": [item["ground_truth"] for item in ragas_answers],
+                "contexts": [item["retrieved_contexts"] for item in ragas_answers],
             }
         )
         class MiniLMRagasEmbeddings(BaseRagasEmbeddings):
@@ -141,30 +207,72 @@ def _run_ragas(settings: Settings, answers: list[dict[str, Any]]) -> dict[str, A
                     self._last_started = time.monotonic()
                     return await super().agenerate_text(*args, **kwargs)
 
+        class MultiKeyRagasLLM(BaseRagasLLM):
+            """Round-robin calls across comma-separated Gemini API keys."""
+
+            def __init__(self, delegates: list[QuotaPacedRagasLLM]):
+                super().__init__()
+                self.delegates = delegates
+                self._next_index = 0
+                self._selection_lock = asyncio.Lock()
+
+            async def _next_delegate(self) -> QuotaPacedRagasLLM:
+                async with self._selection_lock:
+                    delegate = self.delegates[self._next_index % len(self.delegates)]
+                    self._next_index += 1
+                    return delegate
+
+            def generate_text(self, *args: Any, **kwargs: Any):
+                delegate = self.delegates[self._next_index % len(self.delegates)]
+                self._next_index += 1
+                return delegate.generate_text(*args, **kwargs)
+
+            async def agenerate_text(self, *args: Any, **kwargs: Any):
+                return await (await self._next_delegate()).agenerate_text(*args, **kwargs)
+
+            def is_finished(self, response: Any) -> bool:
+                return self.delegates[0].is_finished(response)
+
+            def set_run_config(self, run_config: RunConfig):
+                self.run_config = run_config
+                for delegate in self.delegates:
+                    delegate.set_run_config(run_config)
+
         # Ragas 0.4.x's legacy metrics call embed_query while its abstract
         # base class requires async methods. Implement both on a native Ragas
         # adapter so no LangChain usage event receives a model object.
+        api_keys = [key.strip() for key in (settings.google_api_key or "").split(",") if key.strip()]
+        if not api_keys:
+            api_keys = [settings.google_api_key or ""]
+        requests_per_minute = int(os.getenv("RAGAS_REQUESTS_PER_MINUTE", "12"))
+        ragas_llm = MultiKeyRagasLLM(
+            [
+                QuotaPacedRagasLLM(
+                    build_llm(replace(settings, google_api_key=api_key), temperature=0.0),
+                    requests_per_minute=requests_per_minute,
+                )
+                for api_key in api_keys
+            ]
+        )
+
         result = evaluate(
             dataset,
             metrics=[answer_relevancy, context_precision, context_recall, faithfulness],
-            llm=QuotaPacedRagasLLM(
-                build_llm(settings=settings, temperature=0.0),
-                requests_per_minute=int(os.getenv("RAGAS_REQUESTS_PER_MINUTE", "12")),
-            ),
+            llm=ragas_llm,
             embeddings=MiniLMRagasEmbeddings(settings.embedding_model),
-            # Gemini is rate-limited more aggressively than Ragas' default
-            # 16-way fan-out. Serial execution makes the full lab run slower
-            # but avoids request bursts, invalid classifications and timeouts.
+            # Keep calls below the configured per-key rate and make worker
+            # count scale with an explicit comma-separated key pool.
             run_config=RunConfig(
-                timeout=int(os.getenv("RAGAS_TIMEOUT_SECONDS", "60")),
+                timeout=int(os.getenv("RAGAS_TIMEOUT_SECONDS", "180")),
                 max_retries=int(os.getenv("RAGAS_MAX_RETRIES", "2")),
                 max_wait=int(os.getenv("RAGAS_MAX_WAIT_SECONDS", "10")),
-                max_workers=int(os.getenv("RAGAS_MAX_WORKERS", "4")),
+                max_workers=int(os.getenv("RAGAS_MAX_WORKERS", str(max(4, len(api_keys) * 4)))),
             ),
         )
         scores = getattr(result, "scores", [])
         values: dict[str, Any] = {}
         invalid_metrics: list[str] = []
+        invalid_rows: list[int] = []
         if scores:
             for key in scores[0]:
                 numeric = [float(row[key]) for row in scores if isinstance(row.get(key), (int, float))]
@@ -173,14 +281,25 @@ def _run_ragas(settings: Settings, answers: list[dict[str, Any]]) -> dict[str, A
                     invalid_metrics.append(key)
                     continue
                 values[key] = average
+            invalid_rows = [
+                index
+                for index, row in enumerate(scores)
+                if any(not isinstance(value, (int, float)) or not math.isfinite(float(value)) for value in row.values())
+            ]
+        metadata = {
+            "evaluated_sample_count": len(ragas_answers),
+            "skipped_samples": skipped_samples,
+        }
         if invalid_metrics:
             values.update({
                 "status": "failed",
                 "error": f"Ragas returned invalid metrics: {', '.join(invalid_metrics)}",
+                "invalid_row_indices": invalid_rows,
                 "dependency_version": package_version("ragas"),
+                **metadata,
             })
         else:
-            values.update({"status": "success", "dependency_version": package_version("ragas")})
+            values.update({"status": "success", "dependency_version": package_version("ragas"), **metadata})
         return values
     except Exception as exc:  # pragma: no cover
         return {

@@ -30,7 +30,7 @@ Crossref response → parsed raw records → clean contract → local MiniLM/Chr
 Retrieval hit rate, token F1, LLM judge accuracy/score, data quality checks and freshness are compared across three states.
 
 ## Baseline Results
-`{'samples': 12, 'retrieval_hit_rate': 1.0, 'mean_token_f1': 0.75, 'judge_accuracy': 0.75, 'mean_judge_score': 4, 'judge_provider': 'gemini', 'judge_model': 'gemini-3.5-flash-lite', 'llm_judge_success_count': 12, 'llm_judge_fallback_count': 0, 'ragas': {'answer_relevancy': 0.18087860467972816, 'status': 'failed', 'error': 'Ragas returned invalid metrics: context_precision, context_recall, faithfulness', 'dependency_version': '0.4.3'}}`
+`{'samples': 12, 'retrieval_hit_rate': 1.0, 'mean_token_f1': 0.75, 'judge_accuracy': 0.75, 'mean_judge_score': 4, 'judge_provider': 'gemini', 'judge_model': 'gemini-3.5-flash-lite', 'llm_judge_success_count': 12, 'llm_judge_fallback_count': 0, 'ragas': {'answer_relevancy': 0.24624324523752777, 'context_precision': 0.6666666666, 'context_recall': 0.6666666666666666, 'faithfulness': 0.6666666666666666, 'status': 'success', 'dependency_version': '0.4.3', 'evaluated_sample_count': 9, 'skipped_samples': [{'id': 'q01_categories', 'reason': 'empty_answer'}, {'id': 'q02_categories', 'reason': 'empty_answer'}, {'id': 'q03_categories', 'reason': 'empty_answer'}]}}`
 
 ## Corruption and Repair Results
 - Corrupted: `{'samples': 12, 'retrieval_hit_rate': 0.25, 'mean_token_f1': 0.03251507321274763, 'judge_accuracy': 0.0, 'mean_judge_score': 1, 'judge_provider': 'gemini', 'judge_model': 'gemini-3.5-flash-lite', 'llm_judge_success_count': 12, 'llm_judge_fallback_count': 0, 'ragas': {'status': 'failed', 'error': 'Ragas returned invalid metrics: answer_relevancy, context_precision, context_recall, faithfulness', 'dependency_version': '0.4.3'}}`
@@ -41,11 +41,11 @@ Retrieval hit rate, token F1, LLM judge accuracy/score, data quality checks and 
 ## Reproducibility and Artifact Inventory
 Run `uv sync --extra dev`, configure `.env`, run baseline first, then run corruption flow. Raw snapshots are retained so repair does not copy the baseline clean CSV.
 
-- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\reports\phase1_report.md`
+- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\raw\crossref_response.json`
+- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\raw\crossref_records.json`
+- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\clean\papers_clean.csv`
+- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\eval\test_set.json`
 - `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\reports\corruption_report.md`
-- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\results\baseline_metrics.json`
-- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\results\corrupted_metrics.json`
-- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\results\repaired_metrics.json`
 
 ## Known Limitations
 Provider availability, model nondeterminism and optional Ragas compatibility can affect LLM metrics.
