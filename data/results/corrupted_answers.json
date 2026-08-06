@@ -57,7 +57,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model's answer completely fails to name the correct authors listed in the reference answer."
+      "reasoning": "The model answer lists completely different authors than the reference answer."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -89,7 +89,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer provides the date 2026-04-06, while the reference answer is 2026-08-01. The dates do not match."
+      "reasoning": "The model answer provides an incorrect publication date (2026-04-06) compared to the reference answer (2026-08-01)."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -121,7 +121,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer is completely empty and fails to provide the required categories."
+      "reasoning": "The model answer is completely empty and fails to provide the categories for the specified paper."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -153,7 +153,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer fails to describe the paper's subject matter (JADE-Plus for diagnostic support in jawbone lesions) and instead provides a generic introductory sentence about LLMs."
+      "reasoning": "The model answer discusses generic LLM limitations and hallucinations, which is unrelated to the specific topic of the JADE-Plus paper about jawbone lesions and diagnostic support."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -185,7 +185,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer provides entirely incorrect authors for the specified paper compared to the reference answer."
+      "reasoning": "The model answer provides entirely incorrect authors compared to the reference answer."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -217,7 +217,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer provides the date May 1, 2026, whereas the reference answer states July 13, 2026."
+      "reasoning": "The model answer provides the date May 1, 2026, which does not match the reference answer of July 13, 2026."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -249,7 +249,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer is completely empty and failed to provide the required categories."
+      "reasoning": "The model answer is completely empty and fails to provide the categories for the paper."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -281,7 +281,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer discusses retrieval-augmented generation (RAG) bottlenecks like inference latency and computation cost, which is completely unrelated to the specific paper about time-series forecasting and cross-market equity analysis described in the reference answer."
+      "reasoning": "The model answer discusses retrieval-augmented generation bottlenecks like latency and computation cost, which is completely unrelated to the specific paper about time-series forecasting and cross-market equity analysis mentioned in the question."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -313,7 +313,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer provides incorrect authors compared to the reference answer."
+      "reasoning": "The model answer provides incorrect authors who did not write the specified paper."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -345,7 +345,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer provides the date 2026-05-06, whereas the reference answer is 2026-07-10. The dates do not match."
+      "reasoning": "The model answer provides the date May 6, 2026, whereas the reference answer states July 10, 2026."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -377,7 +377,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "Both the model answer and the reference answer are empty, failing to provide the requested categories for the paper."
+      "reasoning": "Both the model answer and the reference answer are empty, but the reference answer expects specific categories that were not provided by the model."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",

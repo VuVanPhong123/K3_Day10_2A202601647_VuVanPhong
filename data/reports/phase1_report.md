@@ -1,7 +1,7 @@
 # Baseline Pipeline Report (Phase 1)
 
 ## Run Metadata
-- Timestamp (UTC): ``
+- Timestamp (UTC): `2026-08-06T05:51:34.826343+00:00`
 - LLM provider/model: `gemini` / `gemini-3.5-flash-lite`
 - Embedding model: `sentence-transformers/all-MiniLM-L6-v2`
 - Chroma collection: `papers-baseline`
@@ -35,7 +35,7 @@
 - Heuristic fallbacks: `0`
 
 ## Ragas
-`{'answer_relevancy': 0.18087860467972816, 'status': 'failed', 'error': 'Ragas returned invalid metrics: context_precision, context_recall, faithfulness', 'dependency_version': '0.4.3'}`
+`{'skipped': 'Set RUN_RAGAS=1 to enable the slower Ragas pass.'}`
 
 ## Data Quality
 - Status: `PASS`
@@ -62,12 +62,11 @@
 - Stale ratio: `0.0000`
 
 ## Agent Demo
-- Status: `PASS (3 answers)`
+- Status: `not requested`
 
 ## Artifact Paths
-- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\results\baseline_metrics.json`
-- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\results\baseline_answers.json`
-- `C:\Users\ADMIN\Personal_proj\AIcodelab\day10\K3_Day10_Data-Pipeline-Data-Observability\data\results\agent_demo_answers.json`
+- `E:\labVIn\lab 10\K3_Day10_Data-Pipeline-Data-Observability\data\results\baseline_metrics.json`
+- `E:\labVIn\lab 10\K3_Day10_Data-Pipeline-Data-Observability\data\results\baseline_answers.json`
 
 ## Limitations
 - LLM judge and agent demo require the selected provider credentials when enabled.

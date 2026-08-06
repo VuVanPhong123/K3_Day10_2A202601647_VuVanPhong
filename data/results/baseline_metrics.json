@@ -9,9 +9,6 @@
   "llm_judge_success_count": 12,
   "llm_judge_fallback_count": 0,
   "ragas": {
-    "answer_relevancy": 0.18087860467972816,
-    "status": "failed",
-    "error": "Ragas returned invalid metrics: context_precision, context_recall, faithfulness",
-    "dependency_version": "0.4.3"
+    "skipped": "Set RUN_RAGAS=1 to enable the slower Ragas pass."
   }
 }

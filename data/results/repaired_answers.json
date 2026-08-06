@@ -57,7 +57,7 @@
     "judge": {
       "score": 5,
       "correct": true,
-      "reasoning": "The model answer exactly matches the authors listed in the reference answer."
+      "reasoning": "The model answer perfectly matches the reference answer containing the authors of the specified paper."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -121,7 +121,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer is completely empty and failed to provide the categories for the given paper."
+      "reasoning": "The model answer is empty and does not provide the required categories."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -153,7 +153,7 @@
     "judge": {
       "score": 5,
       "correct": true,
-      "reasoning": "The model answer is identical to the reference answer and accurately captures the essence of the paper."
+      "reasoning": "The model answer is identical to the reference answer and correctly identifies the context and subject of the paper regarding jawbone lesions."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -185,7 +185,7 @@
     "judge": {
       "score": 5,
       "correct": true,
-      "reasoning": "The model answer perfectly matches the reference answer containing the authors of the specified paper."
+      "reasoning": "The model answer matches the reference answer completely."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -249,7 +249,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "The model answer is completely empty and fails to provide the requested categories for the paper."
+      "reasoning": "The model answer is completely empty and fails to provide the categories for the specified paper."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -281,7 +281,7 @@
     "judge": {
       "score": 5,
       "correct": true,
-      "reasoning": "The model answer is identical to the reference answer and accurately describes the paper."
+      "reasoning": "The model answer is an exact match to the reference answer, accurately describing the paper's focus on time-series foundation models and retrieval-based augmentation for financial forecasting."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -313,7 +313,7 @@
     "judge": {
       "score": 5,
       "correct": true,
-      "reasoning": "The model answer matches the reference answer exactly, correctly identifying the authors of the paper."
+      "reasoning": "The model answer correctly lists the authors of the specified paper, matching the reference answer exactly."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -345,7 +345,7 @@
     "judge": {
       "score": 5,
       "correct": true,
-      "reasoning": "The model answer matches the reference date exactly."
+      "reasoning": "The model answer matches the reference answer exactly."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
@@ -377,7 +377,7 @@
     "judge": {
       "score": 1,
       "correct": false,
-      "reasoning": "Both the model answer and the reference answer are empty, but the question asks for specific categories of a paper which requires a substantive answer. Therefore, the empty answer is incorrect."
+      "reasoning": "Both the reference answer and the model answer are missing, making it impossible to evaluate the model response."
     },
     "judge_mode": "llm",
     "judge_provider": "gemini",
