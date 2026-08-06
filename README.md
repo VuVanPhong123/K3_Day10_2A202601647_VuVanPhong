@@ -112,11 +112,23 @@ Mặc định project dùng Gemini:
 
 ```dotenv
 LLM_PROVIDER=gemini
-LLM_MODEL=gemini-2.5-flash
-GOOGLE_API_KEY=your_key_here
+LLM_MODEL=gemini-3.5-flash-lite
+GOOGLE_API_KEY=
 ```
 
+Nếu tài khoản chưa có model mặc định, có thể đổi sang fallback `LLM_MODEL=gemini-3.1-flash-lite` (không dùng hậu tố `-preview`).
+
 Project cũng hỗ trợ `openai`, `anthropic`, `openrouter`, `ollama` và OpenAI-compatible custom endpoint. Chỉ điền credential của provider bạn sử dụng.
+
+Chỉ cần cấu hình key của provider đang chọn. Với OpenAI, dùng:
+
+```dotenv
+LLM_PROVIDER=openai
+LLM_MODEL=<an OpenAI model available to the account>
+OPENAI_API_KEY=
+```
+
+Không commit `.env` hoặc API key. `RUN_RAGAS=0` và `RUN_AGENT_DEMO=0` nên được giữ mặc định để tránh API calls và chi phí không cần thiết. Chạy baseline (`script/run_phase1.py`) trước `script/run_corruption_flow.py`. Embedding vẫn dùng MiniLM local, không dùng Gemini/OpenAI.
 
 Không commit `.env`, API key hoặc secret lên GitHub.
 
