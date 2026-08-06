@@ -35,21 +35,17 @@ RUN_RAGAS=0
 
 Repo hiện mặc định `gemini-2.5-flash`, nên người tích hợp cần cập nhật `.env.example` và giá trị mặc định trong `config.py`.
 
-**Chỉ người số 5 chạy evaluation bằng API key thật.** Bốn người còn lại dùng fixture, mock hoặc chạy phần không gọi LLM. Chỉ bật `RUN_RAGAS=1` một lần ở vòng kiểm tra cuối vì Ragas tạo thêm nhiều API calls; code hiện cũng mặc định bỏ qua Ragas nếu biến này chưa bật.
+Vì làm một mình, chạy fixture/mock trước để phát triển nhanh, rồi mới chạy evaluation bằng API key thật. Chỉ bật `RUN_RAGAS=1` một lần ở vòng kiểm tra cuối vì Ragas tạo thêm nhiều API calls; code hiện cũng mặc định bỏ qua Ragas nếu biến này chưa bật.
 
 ---
 
-# Chia việc cho 5 người
+# Trình tự công việc khi làm một mình
 
-## Người 1 — Crossref ingestion(Minh)
+Làm cá nhân nên không cần chia branch theo người; thực hiện tuần tự theo dependency thật của pipeline (ingestion → cleaning/test set → observability → corruption → tích hợp). Có thể vẫn dùng branch theo giai đoạn (ví dụ `feat/crossref-ingestion`, `feat/cleaning-testset`, ...) để commit gọn, nhưng chỉ một người merge nên không cần đợi review chéo.
 
-**Branch**
+## Giai đoạn 1 — Crossref ingestion
 
-```text
-feat/crossref-ingestion
-```
-
-**File sở hữu**
+**File cần hoàn thành**
 
 ```text
 src/ingestion/crossref.py
@@ -79,15 +75,9 @@ Các chức năng này hiện đều là TODO độc lập.
 
 ---
 
-## Người 2 — Cleaning và evaluation test set(Vinh)
+## Giai đoạn 2 — Cleaning và evaluation test set
 
-**Branch**
-
-```text
-feat/cleaning-testset
-```
-
-**File sở hữu**
+**File cần hoàn thành**
 
 ```text
 src/ingestion/cleaning.py
@@ -138,15 +128,9 @@ Hai file này đang là TODO hoàn toàn.
 
 ---
 
-## Người 3 — Data observability và reports(Nam)
+## Giai đoạn 3 — Data observability và reports
 
-**Branch**
-
-```text
-feat/observability-reports
-```
-
-**File sở hữu**
+**File cần hoàn thành**
 
 ```text
 src/observability/quality.py
@@ -200,15 +184,9 @@ Các hàm quality, freshness và reporting hiện đều chưa implement.
 
 ---
 
-## Người 4 — Data corruption(Đức)
+## Giai đoạn 4 — Data corruption
 
-**Branch**
-
-```text
-feat/data-corruption
-```
-
-**File sở hữu**
+**File cần hoàn thành**
 
 ```text
 src/ingestion/corruption.py
@@ -244,7 +222,7 @@ def corrupt_clean_dataframe(
 ) -> pd.DataFrame:
 ```
 
-Người số 5 sẽ truyền `ground_truth_doc_ids` từ test set vào. Nếu corruption chỉ tác động ngẫu nhiên vào các document không xuất hiện trong evaluation set, metrics có thể không giảm và bài sẽ không chứng minh được impact.
+Ở giai đoạn tích hợp (giai đoạn 5), truyền `ground_truth_doc_ids` từ test set vào tham số này. Nếu corruption chỉ tác động ngẫu nhiên vào các document không xuất hiện trong evaluation set, metrics có thể không giảm và bài sẽ không chứng minh được impact.
 
 **Điều kiện hoàn thành**
 
@@ -257,15 +235,9 @@ Người số 5 sẽ truyền `ground_truth_doc_ids` từ test set vào. Nếu c
 
 ---
 
-## Người 5 — Integration, provider và end-to-end
+## Giai đoạn 5 — Integration, provider và end-to-end
 
-**Branch**
-
-```text
-feat/pipeline-integration
-```
-
-**File sở hữu**
+**File cần hoàn thành**
 
 ```text
 src/core/config.py
@@ -353,14 +325,14 @@ data/quality/freshness_repaired.json
 **Điều kiện hoàn thành**
 
 * Pipeline tests dùng monkeypatch, không gọi mạng hoặc API thật.
-* Chỉ người 5 chạy end-to-end với key thật.
+* Chỉ chạy end-to-end với key thật ở giai đoạn kiểm tra cuối, sau khi các giai đoạn trước đã ổn định.
 * Không commit `.env`, API key, Chroma database hoặc artifact quá lớn.
 
 ---
 
-# DataFrame contract phải thống nhất trước khi code
+# DataFrame contract phải chốt trước khi code
 
-Cả nhóm chốt tối thiểu các cột sau:
+Tự chốt tối thiểu các cột sau trước khi code, để tránh phải sửa lại schema giữa chừng khi các giai đoạn sau phụ thuộc vào nó:
 
 | Cột                  | Kiểu            | Bắt buộc |
 | -------------------- | --------------- | -------: |
@@ -377,27 +349,29 @@ Cả nhóm chốt tối thiểu các cột sau:
 | `abs_url`            | `str`           |       Có |
 | `pdf_url`            | `str`           |       Có |
 
-`index.py` hiện truy cập trực tiếp nhiều cột trong bảng này; nếu mỗi thành viên đặt tên khác nhau thì lỗi chỉ xuất hiện lúc integration.
+`index.py` hiện truy cập trực tiếp nhiều cột trong bảng này; nếu đổi tên cột giữa các giai đoạn mà không cập nhật đồng bộ thì lỗi chỉ xuất hiện lúc integration.
 
 ---
 
-# Cách làm song song
+# Cách làm tuần tự cho 1 người
 
-## Wave 1 — Cả 5 người bắt đầu cùng lúc
+Làm một mình thì không có song song thật sự — đi lần lượt theo dependency, mỗi giai đoạn dùng mock/fixture để không phải chờ giai đoạn trước hoàn thiện 100% mới bắt đầu viết code.
+
+## Bước 1 — Viết trước bằng mock/fixture
 
 ```text
-Người 1: Crossref + fixture
-Người 2: Cleaning + test set bằng PaperRecord giả
-Người 3: Quality/report bằng DataFrame giả
-Người 4: Corruption bằng DataFrame giả
-Người 5: Pipeline skeleton + mock tests + model config
+Giai đoạn 1 (Crossref): code với fixture crossref_response.json giả.
+Giai đoạn 2 (Cleaning + test set): code với danh sách PaperRecord giả.
+Giai đoạn 3 (Quality/report): code với DataFrame giả.
+Giai đoạn 4 (Corruption): code với DataFrame giả.
+Giai đoạn 5 (Pipeline skeleton + model config): code với mock tests.
 ```
 
-Không ai cần chờ người khác nếu đã thống nhất DataFrame contract và function signatures.
+Có thể phác thảo skeleton của cả 5 giai đoạn sớm nếu đã chốt DataFrame contract và function signatures, nhưng chỉ hoàn thiện và chạy thật theo đúng thứ tự bên dưới.
 
-## Wave 2 — Merge PR
+## Bước 2 — Hoàn thiện và merge tuần tự
 
-Merge theo thứ tự:
+Hoàn thiện và tự kiểm tra theo thứ tự:
 
 ```text
 1. feat/crossref-ingestion
@@ -407,13 +381,9 @@ Merge theo thứ tự:
 5. feat/pipeline-integration
 ```
 
-PR của người 5 merge cuối, nhưng người 5 vẫn code song song từ đầu bằng mock.
+Giai đoạn 5 (tích hợp) hoàn thiện cuối vì nó gọi vào tất cả các giai đoạn trước, nhưng có thể viết skeleton và mock test từ đầu. Khi cần đổi contract giữa các giai đoạn, ghi lại thay đổi trong commit message trước khi sửa để tránh quên vì sao đã đổi.
 
-Mỗi người chỉ sửa file mình sở hữu. Khi cần thay đổi contract, ghi trong PR description và thông báo trước, không tự sửa file của người khác.
-
-## Wave 3 — Integration bằng key thật
-
-Chỉ người 5 thực hiện:
+## Bước 3 — Integration bằng key thật
 
 ```powershell
 Copy-Item .env.example .env
@@ -429,7 +399,7 @@ Sau khi hai flow đã chạy ổn mới thử:
 RUN_RAGAS=1
 ```
 
-Chỉ cần bật Ragas cho baseline hoặc một vòng final nhỏ; không cần mỗi người chạy.
+Chỉ cần bật Ragas cho baseline hoặc một vòng final nhỏ để tiết kiệm API call.
 
 ---
 
